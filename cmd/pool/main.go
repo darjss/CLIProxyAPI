@@ -83,9 +83,19 @@ func run() error {
 	defer sdkaccess.UnregisterProvider(pool.ProviderID)
 	defer sdkaccess.ClearExclusiveProvider()
 	usage.RegisterNamedPlugin(pool.ProviderID, store)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	defer func() {
+		cancel()
+		if portal.Quota != nil {
+			portal.Quota.Wait()
+		}
+	}()
 	builder := cliproxy.NewBuilder().WithConfig(cfg).WithConfigPath(*configPath).WithServerOptions(
 		api.WithMiddleware(portal.Guard()),
 		api.WithRouterConfigurator(func(r *gin.Engine, base *handlers.BaseAPIHandler, _ *config.Config) {
+			portal.Quota = pool.NewCollector(store, base.AuthManager)
+			portal.Quota.Start(ctx)
 			portal.Accounts = func() []pool.Account {
 				out := []pool.Account{}
 				for _, a := range base.AuthManager.List() {
@@ -110,8 +120,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("build Pool runtime: %w", err)
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
 	log.WithField("port", cfg.Port).Info("Pool listening on 127.0.0.1; dashboard at /pool/")
 	errRun := service.Run(ctx)
 	// The proxy stops delivery asynchronously. Drain before closing SQLite.

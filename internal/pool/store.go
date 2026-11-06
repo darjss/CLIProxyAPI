@@ -143,7 +143,13 @@ CREATE TABLE IF NOT EXISTS events (
  price_id INTEGER REFERENCES prices(id), cost_micros INTEGER);
 CREATE INDEX IF NOT EXISTS events_time ON events(timestamp);
 CREATE INDEX IF NOT EXISTS events_token_time ON events(token_id,timestamp);
-PRAGMA user_version=1;`)
+CREATE TABLE IF NOT EXISTS quota_accounts (
+ account_id TEXT PRIMARY KEY, provider TEXT NOT NULL, status TEXT NOT NULL, checked_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS quota_snapshots (
+ id INTEGER PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL, window TEXT NOT NULL,
+ period_seconds INTEGER NOT NULL, remaining REAL NOT NULL, reset_at INTEGER NOT NULL, observed_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);
+PRAGMA user_version=2;`)
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize pool schema: %w", err)

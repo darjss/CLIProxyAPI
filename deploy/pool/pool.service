@@ -1,0 +1,15 @@
+[Unit]
+Description=Pool shared AI gateway
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/pool
+EnvironmentFile=%h/.config/pool/runtime.env
+ExecStart=%h/.local/share/pool/bin/pool --config %h/.config/pool/config.yaml --database %h/.local/share/pool/data/pool.db --web-dir %h/.local/share/pool/web
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

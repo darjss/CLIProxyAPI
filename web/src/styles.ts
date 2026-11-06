@@ -1,6 +1,54 @@
 import { css } from "../styled-system/css";
 
 export const styles = {
+  quotaControls: css({
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "8px",
+  }),
+  quotaSummary: css({
+    display: "grid",
+    gridTemplateColumns: "2fr 1fr 1.3fr 1.3fr",
+    alignItems: "center",
+    gap: "18px",
+    margin: "18px 0",
+    fontSize: "11px",
+    "@media (max-width: 900px)": { gridTemplateColumns: "1fr 1fr" },
+    "@media (max-width: 480px)": {
+      gridTemplateColumns: "1fr 1fr",
+      gap: "14px",
+    },
+  }),
+  quotaBalance: css({
+    fontSize: "38px",
+    letterSpacing: "-1.5px",
+    fontWeight: 550,
+    lineHeight: 1.2,
+    "& span": {
+      fontSize: "12px",
+      letterSpacing: 0,
+      color: "fg.muted",
+      fontWeight: 400,
+    },
+  }),
+  quotaChart: css({ height: "240px", width: "100%", minWidth: 0 }),
+  quotaLegend: css({
+    display: "flex",
+    gap: "16px",
+    fontSize: "10px",
+    color: "fg.muted",
+    marginTop: "12px",
+    flexWrap: "wrap",
+    "& span:last-child": { marginLeft: "auto" },
+  }),
+  quotaDetails: css({
+    marginTop: "20px",
+    borderTop: "1px solid {colors.border}",
+    paddingTop: "12px",
+    "& summary": { cursor: "pointer", fontSize: "11px", color: "fg.muted" },
+    "& table": { marginTop: "12px" },
+  }),
   muted: css({
     color: "{colors.fg.muted}",
   }),
