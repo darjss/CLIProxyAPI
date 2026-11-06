@@ -46,7 +46,7 @@ provider; Pool does not implement a second signup/login flow.
 
 Browser users create a token by naming it. The secret is returned once and only
 a SHA-256 digest is stored. Token names are visible in shared rankings; owner
-emails and request history are private. Members can revoke only their own keys.
+emails and request history are private. Members can rename or revoke their own keys.
 Admins can configure daily per-token caps and bind existing Access machine
 credentials using the administration page.
 
