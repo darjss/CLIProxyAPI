@@ -1,0 +1,842 @@
+import { css } from "../styled-system/css";
+
+export const styles = {
+  muted: css({
+    color: "{colors.fg.muted}",
+  }),
+  small: css({
+    fontSize: "12px",
+  }),
+  srOnly: css({
+    position: "absolute",
+    top: "0",
+    left: "0",
+    width: "1px",
+    height: "1px",
+    padding: "0",
+    overflow: "hidden",
+    clip: "rect(0, 0, 0, 0)",
+    whiteSpace: "nowrap",
+    border: "0",
+  }),
+  appShell: css({
+    display: "flex",
+    minHeight: "100dvh",
+  }),
+  brand: css({
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    fontSize: "22px",
+    fontWeight: 650,
+    letterSpacing: "-0.8px",
+    padding: "0 12px",
+  }),
+  brandMark: css({
+    width: "31px",
+    height: "31px",
+    border: "1px solid #323239",
+    borderRadius: "8px",
+    display: "grid",
+    placeItems: "center",
+    background: "#1c1c21",
+    color: "#dedee6",
+  }),
+  brandOrg: css({
+    fontSize: "12px",
+    fontWeight: 400,
+    color: "#62626e",
+    letterSpacing: "0",
+    marginLeft: "2px",
+  }),
+  navCaption: css({
+    fontSize: "9px",
+    color: "#5f5f6b",
+    fontWeight: 550,
+    letterSpacing: "1.5px",
+    margin: "48px 13px 13px",
+  }),
+  navItem: css({
+    border: "0",
+    background: "transparent",
+    display: "flex",
+    alignItems: "center",
+    gap: "11px",
+    width: "100%",
+    padding: "11px 12px",
+    borderRadius: "7px",
+    color: "#92929e",
+    fontSize: "12px",
+    textAlign: "left",
+    position: "relative",
+    "&:hover": {
+      background: "#17171b",
+      color: "#dedee5",
+    },
+    '&[aria-current="page"]': {
+      background: "#202025",
+      color: "#f1f1f5",
+    },
+  }),
+  navDot: css({
+    width: "4px",
+    height: "4px",
+    borderRadius: "50%",
+    background: "#b8b9cc",
+    marginLeft: "auto",
+  }),
+  sidebarBottom: css({
+    marginTop: "auto",
+    padding: "28px 6px 0",
+  }),
+  connection: css({
+    fontSize: "10px",
+    color: "#8b8b95",
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    marginBottom: "16px",
+    padding: "0 6px",
+  }),
+  statusDot: css({
+    width: "5px",
+    height: "5px",
+    borderRadius: "50%",
+    background: "#94ae9c",
+    flexShrink: 0,
+  }),
+  identity: css({
+    borderTop: "1px solid {colors.border}",
+    padding: "17px 3px 0",
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    color: "#777784",
+    "& > div:nth-child(2)": {
+      minWidth: "0",
+      flex: "1",
+    },
+    "& strong": {
+      fontSize: "10px",
+      color: "#c5c5cf",
+      display: "block",
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    },
+    "& span": {
+      fontSize: "9px",
+      display: "block",
+      marginTop: "3px",
+    },
+  }),
+  avatar: css({
+    height: "28px",
+    width: "28px",
+    display: "grid",
+    placeItems: "center",
+    background: "#24242c",
+    border: "1px solid #34343e",
+    borderRadius: "50%",
+    fontSize: "11px",
+    color: "#c7c7d5",
+  }),
+  workspace: css({
+    marginLeft: "220px",
+    minWidth: "0",
+    flex: "1",
+    display: "flex",
+    flexDirection: "column",
+    "@media (max-width: 1100px)": {
+      marginLeft: "190px",
+    },
+    "@media (max-width: 720px)": {
+      marginLeft: "0",
+    },
+  }),
+  topbar: css({
+    height: "62px",
+    borderBottom: "1px solid {colors.border}",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "20px",
+    padding: "0 34px",
+    "@media (min-width: 1500px)": {
+      padding: "0 48px",
+    },
+    "@media (max-width: 1100px)": {
+      padding: "0 26px",
+    },
+    "@media (max-width: 720px)": {
+      height: "54px",
+      padding: "0 18px",
+    },
+  }),
+  breadcrumb: css({
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    color: "#656570",
+    fontSize: "11px",
+    "& strong": {
+      color: "#b5b5bf",
+      fontWeight: 400,
+    },
+  }),
+  topbarActions: css({
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    "@media (max-width: 720px)": {
+      gap: "5px",
+    },
+  }),
+  version: css({
+    fontSize: "10px",
+    color: "#757581",
+    marginRight: "8px",
+    "@media (max-width: 720px)": {
+      display: "none",
+    },
+  }),
+  devBanner: css({
+    padding: "9px 34px",
+    borderBottom: "1px solid #302c22",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    color: "#b0a58f",
+    background: "#17150f",
+    fontSize: "10px",
+    "& > span:first-child": {
+      background: "#c4af7f",
+    },
+    "@media (min-width: 1500px)": {
+      paddingLeft: "48px",
+    },
+    "@media (max-width: 1100px)": {
+      paddingLeft: "26px",
+    },
+    "@media (max-width: 720px)": {
+      fontSize: "9px",
+      padding: "8px 18px",
+    },
+  }),
+  pageContent: css({
+    padding: "34px",
+    maxWidth: "1600px",
+    width: "100%",
+    margin: "0 auto",
+    flex: "1",
+    "@media (min-width: 1500px)": {
+      padding: "42px 48px",
+    },
+    "@media (max-width: 1100px)": {
+      padding: "26px",
+    },
+    "@media (max-width: 720px)": {
+      padding: "24px 18px",
+    },
+  }),
+  pageHeader: css({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "18px",
+    marginBottom: "29px",
+    "& p": {
+      fontSize: "12px",
+      color: "{colors.fg.muted}",
+      marginTop: "6px",
+    },
+    "@media (max-width: 1100px)": {
+      alignItems: "flex-start",
+      "& > div:last-child": {
+        flexWrap: "wrap",
+        justifyContent: "flex-end",
+      },
+    },
+    "@media (max-width: 720px)": {
+      display: "block",
+      marginBottom: "24px",
+    },
+  }),
+  headerActions: css({
+    display: "flex",
+    alignItems: "center",
+    gap: "9px",
+    flexShrink: 0,
+    "@media (max-width: 720px)": {
+      marginTop: "17px",
+      justifyContent: "flex-start !important",
+    },
+  }),
+  statGrid: css({
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: "0",
+    border: "1px solid {colors.border}",
+    borderRadius: "{radii.panel}",
+    background: "{colors.surface}",
+    marginBottom: "32px",
+    "@media (max-width: 720px)": {
+      gridTemplateColumns: "1fr 1fr",
+      marginBottom: "26px",
+    },
+  }),
+  stat: css({
+    padding: "21px 23px",
+    position: "relative",
+    "& + &::before": {
+      content: '""',
+      position: "absolute",
+      top: "22px",
+      bottom: "22px",
+      left: "0",
+      width: "1px",
+      background: "{colors.border}",
+    },
+    "& p": {
+      fontSize: "11px",
+      color: "#9595a1",
+    },
+    "& strong": {
+      display: "block",
+      fontSize: "29px",
+      letterSpacing: "-1px",
+      margin: "9px 0 7px",
+      fontWeight: 500,
+      fontVariantNumeric: "tabular-nums",
+    },
+    "& span": {
+      fontSize: "10px",
+      color: "#62626f",
+    },
+    "@media (max-width: 1100px)": {
+      padding: "18px 15px",
+      "& strong": {
+        fontSize: "25px",
+      },
+    },
+    "@media (max-width: 720px)": {
+      "&:nth-child(3)": {
+        borderTop: "1px solid {colors.border}",
+      },
+      "&:nth-child(4)": {
+        borderTop: "1px solid {colors.border}",
+      },
+      "&:nth-child(3):before": {
+        display: "none",
+      },
+      "& strong": {
+        fontSize: "25px",
+      },
+      "& p": {
+        fontSize: "10px",
+      },
+      "& span": {
+        fontSize: "9px",
+      },
+    },
+  }),
+  sectionHeading: css({
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "13px",
+  }),
+  providerGrid: css({
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "16px",
+    marginBottom: "26px",
+    "& > section": {
+      marginBottom: "0",
+    },
+    "@media (max-width: 1100px)": {
+      gridTemplateColumns: "1fr",
+    },
+  }),
+  panelHeading: css({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginBottom: "18px",
+    "@media (max-width: 720px)": {
+      flexWrap: "wrap",
+    },
+  }),
+  providerName: css({
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexWrap: "wrap",
+  }),
+  countBadge: css({
+    fontSize: "10px",
+    color: "#777783",
+  }),
+  subtleBadge: css({
+    fontSize: "9px",
+    padding: "4px 7px",
+    background: "#1c1c21",
+    borderRadius: "4px",
+    color: "#90909d",
+    whiteSpace: "nowrap",
+  }),
+  quotaUnknown: css({
+    fontSize: "44px",
+    letterSpacing: "-2px",
+    lineHeight: 1.2,
+    margin: "16px 0 16px",
+    color: "#575762",
+    "& span": {
+      display: "inline-block",
+      fontSize: "11px",
+      color: "#73737f",
+      letterSpacing: "0",
+      marginLeft: "10px",
+    },
+  }),
+  quotaPending: css({
+    display: "flex",
+    gap: "10px",
+    alignItems: "flex-start",
+    border: "1px dashed #2b2b32",
+    borderRadius: "6px",
+    padding: "16px 14px",
+    minHeight: "79px",
+    "& svg": {
+      flexShrink: 0,
+      color: "#60606e",
+      marginTop: "2px",
+    },
+    "& p": {
+      fontSize: "11px",
+      color: "#747480",
+      maxWidth: "400px",
+    },
+    "@media (max-width: 720px)": {
+      "& p": {
+        fontSize: "10px",
+      },
+    },
+  }),
+  providerFoot: css({
+    borderTop: "1px solid #222227",
+    marginTop: "20px",
+    paddingTop: "13px",
+    display: "flex",
+    gap: "20px",
+    fontSize: "9px",
+    color: "#666673",
+    "& span:last-child": {
+      marginLeft: "auto",
+      color: "#4d4d59",
+    },
+    "@media (max-width: 720px)": {
+      gap: "13px",
+      fontSize: "8px",
+    },
+  }),
+  activityPanel: css({
+    marginTop: "5px",
+  }),
+  usageChart: css({
+    height: "240px",
+    width: "100%",
+    minWidth: "0",
+    "@media (max-width: 720px)": {
+      height: "210px",
+    },
+  }),
+  emptyState: css({
+    textAlign: "center",
+    padding: "42px 14px 45px",
+    "& h3": {
+      fontSize: "13px",
+      fontWeight: 500,
+      color: "#b2b2bf",
+      marginBottom: "7px",
+    },
+    "& p": {
+      fontSize: "11px",
+      color: "#71717e",
+      maxWidth: "420px",
+      margin: "0 auto 15px",
+    },
+    "& > button": {
+      marginTop: "5px",
+    },
+  }),
+  emptyMark: css({
+    fontSize: "37px",
+    lineHeight: 1.2,
+    display: "block",
+    color: "#42424f",
+    marginBottom: "16px",
+  }),
+  appFooter: css({
+    margin: "0 34px",
+    padding: "18px 0",
+    borderTop: "1px solid #1c1c22",
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "20px",
+    fontSize: "9px",
+    color: "#555561",
+    "@media (min-width: 1500px)": {
+      margin: "0 48px",
+    },
+    "@media (max-width: 1100px)": {
+      "& span:last-child": {
+        display: "none",
+      },
+    },
+    "@media (max-width: 720px)": {
+      margin: "0 18px",
+    },
+  }),
+  footerDivider: css({
+    color: "#353540",
+    margin: "0 7px",
+  }),
+  notice: css({
+    border: "1px solid #30303b",
+    background: "#14141b",
+    borderRadius: "7px",
+    padding: "13px 15px",
+    display: "flex",
+    gap: "10px",
+    alignItems: "flex-start",
+    marginBottom: "20px",
+    color: "#90909f",
+    fontSize: "11px",
+    "& svg": {
+      flexShrink: 0,
+      marginTop: "2px",
+    },
+    "& p": {
+      maxWidth: "900px",
+    },
+  }),
+  tableScroll: css({
+    overflowX: "auto",
+  }),
+  strong: css({
+    color: "#dddde6",
+    fontWeight: 500,
+  }),
+  cellNote: css({
+    display: "block",
+    fontSize: "9px",
+    fontWeight: 400,
+    color: "#626270",
+    marginTop: "5px",
+  }),
+  tokenName: css({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "8px",
+  }),
+  rankingToolbar: css({
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    marginBottom: "18px",
+    "@media (max-width: 720px)": {
+      alignItems: "flex-start",
+      flexDirection: "column",
+    },
+  }),
+  segmented: css({
+    display: "flex",
+    gap: "3px",
+    background: "#111115",
+    border: "1px solid #27272f",
+    padding: "3px",
+    borderRadius: "7px",
+    "& button": {
+      padding: "7px 13px",
+      fontSize: "11px",
+      border: "0",
+      borderRadius: "4px",
+      background: "none",
+      color: "#777784",
+    },
+    '& button[aria-pressed="true"]': {
+      background: "#2b2b33",
+      color: "#e4e4eb",
+    },
+  }),
+  footnote: css({
+    fontSize: "10px",
+    color: "#696976",
+    marginTop: "15px",
+    lineHeight: 1.7,
+  }),
+  loading: css({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "10px",
+    padding: "60px 20px",
+    color: "#898996",
+    fontSize: "12px",
+  }),
+  spin: css({
+    animation: "spin 1s linear infinite",
+  }),
+  errorState: css({
+    display: "flex",
+    gap: "12px",
+    alignItems: "flex-start",
+    border: "1px solid #4c3034",
+    background: "#211619",
+    borderRadius: "8px",
+    padding: "18px",
+    color: "#d79c9b",
+    marginBottom: "20px",
+    fontSize: "12px",
+    "& strong": {
+      display: "block",
+      marginBottom: "5px",
+    },
+    "& p": {
+      color: "#ab8689",
+      fontSize: "11px",
+    },
+  }),
+  textButton: css({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    border: "0",
+    background: "none",
+    color: "#dedee6",
+    fontSize: "11px",
+    padding: "10px 0 0",
+  }),
+  entryState: css({
+    maxWidth: "500px",
+    margin: "100px auto",
+    padding: "25px",
+    "& > div:first-child": {
+      padding: "0",
+      marginBottom: "30px",
+    },
+    "& > p": {
+      fontSize: "12px",
+    },
+  }),
+  dialog: css({
+    width: "min(460px, calc(100% - 32px))",
+    padding: "24px",
+    border: "1px solid #393943",
+    borderRadius: "12px",
+    background: "#151519",
+    color: "fg.default",
+    boxShadow: "0 20px 100px #0008",
+    "&::backdrop": {
+      background: "#0009",
+      backdropFilter: "blur(3px)",
+    },
+    "& p": {
+      fontSize: "12px",
+    },
+  }),
+  dialogHeading: css({
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: "22px",
+    "& h2": {
+      fontSize: "18px",
+      fontWeight: 550,
+      letterSpacing: "-0.4px",
+    },
+  }),
+  dialogActions: css({
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "8px",
+    marginTop: "26px",
+  }),
+  field: css({
+    display: "grid",
+    gap: "7px",
+    fontSize: "10px",
+    color: "#9a9aa7",
+    marginBottom: "16px",
+    "& input": {
+      width: "100%",
+    },
+    "& select": {
+      width: "100%",
+    },
+    "& input::placeholder": {
+      color: "#5f5f6d",
+    },
+  }),
+  secret: css({
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "10px",
+    background: "#0b0b0f",
+    border: "1px solid #33333d",
+    borderRadius: "7px",
+    padding: "13px",
+    margin: "18px 0 10px",
+    "& code": {
+      overflowWrap: "anywhere",
+      color: "#c1c1d1",
+      lineHeight: 1.8,
+      userSelect: "all",
+    },
+    "& button": {
+      margin: "-4px -4px 0 0",
+    },
+  }),
+  formError: css({
+    fontSize: "11px",
+    color: "#df9691",
+    marginTop: "9px",
+  }),
+  accountList: css({
+    display: "grid",
+    gap: "0",
+  }),
+  accountRow: css({
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    borderTop: "1px solid #25252c",
+    padding: "15px 0",
+    "& > div": {
+      flex: "1",
+      minWidth: "0",
+    },
+    "& strong": {
+      fontSize: "12px",
+      display: "block",
+      textTransform: "capitalize",
+    },
+    "& code": {
+      display: "block",
+      fontSize: "9px",
+      overflowWrap: "anywhere",
+      marginTop: "4px",
+    },
+  }),
+  sectionDescription: css({
+    margin: "-7px 0 20px",
+    maxWidth: "850px",
+  }),
+  priceForm: css({
+    paddingBottom: "23px",
+    borderBottom: "1px solid {colors.border}",
+    marginBottom: "20px",
+  }),
+  priceIdentity: css({
+    display: "grid",
+    gridTemplateColumns: "150px 1fr",
+    gap: "12px",
+    maxWidth: "600px",
+    "@media (max-width: 720px)": {
+      gridTemplateColumns: "100px 1fr",
+    },
+  }),
+  priceRates: css({
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: "12px",
+    maxWidth: "800px",
+    "@media (max-width: 720px)": {
+      gridTemplateColumns: "1fr 1fr",
+    },
+  }),
+  inlineActions: css({
+    display: "flex",
+    gap: "14px",
+    alignItems: "center",
+    "@media (max-width: 720px)": {
+      alignItems: "flex-start",
+      flexDirection: "column",
+    },
+  }),
+  tokenSettings: css({
+    display: "flex",
+    alignItems: "flex-end",
+    gap: "12px",
+    paddingTop: "17px",
+    borderTop: "1px solid #27272e",
+    flexWrap: "wrap",
+    "& > label": {
+      flex: "1",
+      minWidth: "180px",
+    },
+    "& > label:nth-of-type(2)": {
+      flex: "0 1 150px",
+      minWidth: "100px",
+    },
+    "& > button": {
+      marginBottom: "16px",
+    },
+    "@media (max-width: 720px)": {
+      "& > label": {
+        minWidth: "160px",
+      },
+      "& > label:nth-of-type(2)": {
+        minWidth: "100px",
+      },
+    },
+  }),
+  settingName: css({
+    minWidth: "140px",
+    alignSelf: "center",
+    marginBottom: "16px",
+    "& strong": {
+      fontSize: "11px",
+      display: "block",
+    },
+    "& code": {
+      display: "block",
+      fontSize: "9px",
+      marginTop: "5px",
+    },
+    "@media (max-width: 720px)": {
+      width: "100%",
+      marginBottom: "4px",
+    },
+  }),
+  mobileClose: css({
+    display: "none",
+    "@media (max-width: 720px)": {
+      display: "inline-flex",
+      position: "absolute",
+      right: "8px",
+      top: "28px",
+    },
+  }),
+  mobileMenu: css({
+    display: "none",
+    "@media (max-width: 720px)": {
+      display: "inline-flex",
+      marginLeft: "-6px",
+    },
+  }),
+  navBackdrop: css({
+    display: "none",
+    "@media (max-width: 720px)": {
+      display: "block",
+      position: "fixed",
+      inset: "0",
+      border: "0",
+      background: "#0008",
+      zIndex: 15,
+    },
+  }),
+};

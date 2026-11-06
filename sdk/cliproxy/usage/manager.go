@@ -628,6 +628,7 @@ type Manager struct {
 	once     sync.Once
 	stopOnce sync.Once
 	cancel   context.CancelFunc
+	done     chan struct{}
 
 	mu     sync.Mutex
 	cond   *sync.Cond
@@ -641,7 +642,7 @@ type Manager struct {
 
 // NewManager constructs a manager with a buffered queue.
 func NewManager(buffer int) *Manager {
-	m := &Manager{}
+	m := &Manager{done: make(chan struct{})}
 	m.cond = sync.NewCond(&m.mu)
 	return m
 }
@@ -657,8 +658,29 @@ func (m *Manager) Start(ctx context.Context) {
 		}
 		var workerCtx context.Context
 		workerCtx, m.cancel = context.WithCancel(ctx)
-		go m.run(workerCtx)
+		go func() {
+			defer close(m.done)
+			m.run(workerCtx)
+		}()
 	})
+}
+
+// StopAndWait drains published records before callers close persistent sinks.
+func (m *Manager) StopAndWait(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.Start(context.Background())
+	m.Stop()
+	select {
+	case <-m.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Stop stops the dispatcher and drains the queue.

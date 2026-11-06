@@ -1,5 +1,10 @@
 # Binaries
 cli-proxy-api
+/pool
+/.pool/
+/web/node_modules/
+/web/dist/
+/web/styled-system/
 *.exe
 
 # Configuration

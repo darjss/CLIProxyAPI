@@ -1,0 +1,13 @@
+config-version: 8
+server:
+  host: "127.0.0.1"
+  port: 8317
+oauth:
+  auth-dir: "./auths"
+management:
+  disable-control-panel: true
+routing:
+  strategy: "round-robin"
+observability:
+  logs:
+    request-log: false
