@@ -1,3 +1,6 @@
+import { styles } from "../styles";
+import { cx } from "../../styled-system/css";
+import { button, panel, providerSymbol } from "../../styled-system/recipes";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Clock3, Plus } from "lucide-react";
@@ -31,7 +34,7 @@ export function OverviewPage({ onCreate }: { onCreate: () => void }) {
         description="One view of your shared pool and your own usage."
       >
         <PeriodSelect value={period} onChange={setPeriod} />
-        <button className="button primary" onClick={onCreate}>
+        <button className={button({ variant: "primary" })} onClick={onCreate}>
           <Plus size={15} />
           Create token
         </button>
@@ -45,7 +48,7 @@ export function OverviewPage({ onCreate }: { onCreate: () => void }) {
         <Loading />
       ) : (
         <>
-          <section className="stat-grid" aria-label="Your usage summary">
+          <section className={styles.statGrid} aria-label="Your usage summary">
             <Stat
               label="Total tokens"
               value={number.format(overview.data.usage.tokens)}
@@ -76,39 +79,43 @@ export function OverviewPage({ onCreate }: { onCreate: () => void }) {
               }
             />
           </section>
-          <div className="section-heading">
+          <div className={styles.sectionHeading}>
             <h2>Shared quota</h2>
-            <span className="muted small">Admin-maintained accounts</span>
+            <span className={cx(styles.muted, styles.small)}>
+              Admin-maintained accounts
+            </span>
           </div>
-          <div className="provider-grid">
+          <div className={styles.providerGrid}>
             {(["claude", "codex"] as const).map((provider) => (
-              <section
-                key={provider}
-                className={"panel provider-panel " + provider}
-              >
-                <div className="panel-heading">
-                  <div className="provider-name">
-                    <span className="provider-symbol" aria-hidden="true">
+              <section key={provider} className={panel()}>
+                <div className={styles.panelHeading}>
+                  <div className={styles.providerName}>
+                    <span
+                      className={providerSymbol({ provider })}
+                      aria-hidden="true"
+                    >
                       {provider === "claude" ? "✳" : "◈"}
                     </span>
                     <h3>{provider === "claude" ? "Claude" : "Codex"}</h3>
-                    <span className="count-badge">
+                    <span className={styles.countBadge}>
                       {overview.data.accounts[provider] ?? 0} accounts
                     </span>
                   </div>
-                  <span className="subtle-badge">Awaiting quota collector</span>
+                  <span className={styles.subtleBadge}>
+                    Awaiting quota collector
+                  </span>
                 </div>
-                <div className="quota-unknown">
+                <div className={styles.quotaUnknown}>
                   —<span>remaining capacity</span>
                 </div>
-                <div className="quota-pending">
+                <div className={styles.quotaPending}>
                   <Clock3 size={16} />
                   <p>
                     Quota history and forecasts will appear when collection is
                     connected. No balance has been inferred from token usage.
                   </p>
                 </div>
-                <div className="provider-foot">
+                <div className={styles.providerFoot}>
                   <span>History</span>
                   <span>Burn rate</span>
                   <span>Next reset</span>
@@ -119,13 +126,15 @@ export function OverviewPage({ onCreate }: { onCreate: () => void }) {
           </div>
         </>
       )}
-      <section className="panel activity-panel">
-        <div className="panel-heading">
+      <section className={cx(panel(), styles.activityPanel)}>
+        <div className={styles.panelHeading}>
           <div>
             <h2>Your activity</h2>
-            <p className="muted small">Reported tokens by day · UTC</p>
+            <p className={cx(styles.muted, styles.small)}>
+              Reported tokens by day · UTC
+            </p>
           </div>
-          <ArrowUpRight size={17} className="muted" />
+          <ArrowUpRight size={17} className={styles.muted} />
         </div>
         {activity.isError ? (
           <ErrorState
@@ -141,7 +150,7 @@ export function OverviewPage({ onCreate }: { onCreate: () => void }) {
           />
         ) : (
           <div
-            className="usage-chart"
+            className={styles.usageChart}
             role="img"
             aria-label="Your daily token usage"
           >

@@ -1,3 +1,4 @@
+import { styles } from "./styles";
 import type { ReactNode } from "react";
 import { ArrowUpRight, CircleAlert, LoaderCircle } from "lucide-react";
 import { periodLabels, type Period } from "./api";
@@ -12,12 +13,12 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="page-header">
+    <header className={styles.pageHeader}>
       <div>
         <h1>{title}</h1>
         <p>{description}</p>
       </div>
-      <div className="header-actions">{children}</div>
+      <div className={styles.headerActions}>{children}</div>
     </header>
   );
 }
@@ -46,8 +47,8 @@ export function PeriodSelect({
 
 export function Loading({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="loading" role="status">
-      <LoaderCircle className="spin" size={16} />
+    <div className={styles.loading} role="status">
+      <LoaderCircle className={styles.spin} size={16} />
       {label}
     </div>
   );
@@ -61,13 +62,13 @@ export function ErrorState({
   retry?: () => void;
 }) {
   return (
-    <div className="error-state" role="alert">
+    <div className={styles.errorState} role="alert">
       <CircleAlert size={18} />
       <div>
         <strong>Couldn’t load this view</strong>
         <p>{error.message}</p>
         {retry && (
-          <button className="text-button" onClick={retry}>
+          <button className={styles.textButton} onClick={retry}>
             Try again <ArrowUpRight size={13} />
           </button>
         )}
@@ -86,8 +87,8 @@ export function EmptyState({
   children?: ReactNode;
 }) {
   return (
-    <div className="empty-state">
-      <span className="empty-mark" aria-hidden="true">
+    <div className={styles.emptyState}>
+      <span className={styles.emptyMark} aria-hidden="true">
         ∿
       </span>
       <h3>{title}</h3>
@@ -107,7 +108,7 @@ export function Stat({
   detail: string;
 }) {
   return (
-    <div className="stat">
+    <div className={styles.stat}>
       <p>{label}</p>
       <strong>{value}</strong>
       <span>{detail}</span>

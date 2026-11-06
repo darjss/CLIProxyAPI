@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
-    "format": "prettier --write src vite.config.ts index.html"
+    "build": "panda codegen && tsc --noEmit && vite build",
+    "typecheck": "panda codegen && tsc --noEmit",
+    "format": "prettier --write src *.ts *.cjs index.html",
+    "prepare": "panda codegen"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.106.1",
@@ -17,9 +18,13 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@pandacss/dev": "^2.5.0",
+    "@pandacss/preset-base": "^2.5.0",
+    "@pandacss/preset-panda": "^2.5.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.2.1",
+    "postcss": "^8.5.32",
     "prettier": "^3.9.10",
     "typescript": "^7.0.2",
     "vite": "^8.3.6"

@@ -92,7 +92,9 @@ with the event; editing prices does not rewrite history. Unclassified usage or
 missing rates remain unpriced. Costs are token-only API-equivalent estimates,
 not actual subscription charges or tool/media fees.
 
-The dashboard includes personal activity, private request metadata, named-token
+The React dashboard uses Panda CSS tokens, shared component recipes, and
+generated static utilities. `npm ci` runs Panda code generation; the generated
+`web/styled-system` directory is ignored. The dashboard includes personal activity, private request metadata, named-token
 rankings by tokens or estimated cost, account status, and price/limit controls.
 Quota collectors, pooled quota history/forecasts, dashboard OAuth management,
 per-owner aggregate limits, retention automation, Cloudflare provisioning, and

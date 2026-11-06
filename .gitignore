@@ -4,6 +4,7 @@ cli-proxy-api
 /.pool/
 /web/node_modules/
 /web/dist/
+/web/styled-system/
 *.exe
 
 # Configuration

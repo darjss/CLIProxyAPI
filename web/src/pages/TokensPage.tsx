@@ -1,3 +1,11 @@
+import { styles } from "../styles";
+import { cx } from "../../styled-system/css";
+import {
+  button,
+  iconButton,
+  panel,
+  tokenStatus,
+} from "../../styled-system/recipes";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -25,12 +33,15 @@ export function TokensPage({ development }: { development: boolean }) {
         title="API tokens"
         description="A name for every client. A separate key for every connection."
       >
-        <button className="button primary" onClick={() => setCreating(true)}>
+        <button
+          className={button({ variant: "primary" })}
+          onClick={() => setCreating(true)}
+        >
           <Plus size={15} />
           Create token
         </button>
       </PageHeader>
-      <div className="notice">
+      <div className={styles.notice}>
         <KeyRound size={16} />
         <p>
           {development
@@ -43,20 +54,20 @@ export function TokensPage({ development }: { development: boolean }) {
       ) : tokens.isPending ? (
         <Loading />
       ) : !tokens.data.length ? (
-        <div className="panel">
+        <div className={panel()}>
           <EmptyState
             title="Make your first connection."
             description="Name a token after the person, machine, or project using it."
           >
-            <button className="button" onClick={() => setCreating(true)}>
+            <button className={button()} onClick={() => setCreating(true)}>
               <Plus size={14} />
               Create token
             </button>
           </EmptyState>
         </div>
       ) : (
-        <div className="panel table-panel">
-          <div className="table-scroll">
+        <div className={panel({ table: true })}>
+          <div className={styles.tableScroll}>
             <table>
               <thead>
                 <tr>
@@ -66,7 +77,7 @@ export function TokensPage({ development }: { development: boolean }) {
                   <th>Daily limit</th>
                   <th>Created</th>
                   <th>
-                    <span className="sr-only">Actions</span>
+                    <span className={styles.srOnly}>Actions</span>
                   </th>
                 </tr>
               </thead>
@@ -79,11 +90,11 @@ export function TokensPage({ development }: { development: boolean }) {
                       : "Active";
                   return (
                     <tr key={token.id}>
-                      <td className="strong">
-                        <span className="token-name">
+                      <td className={styles.strong}>
+                        <span className={styles.tokenName}>
                           {token.name}
                           <button
-                            className="icon-button"
+                            className={iconButton()}
                             aria-label={"Rename " + token.name}
                             onClick={() => setRenaming(token)}
                           >
@@ -96,17 +107,16 @@ export function TokensPage({ development }: { development: boolean }) {
                       </td>
                       <td>
                         <span
-                          className={
-                            "token-status " +
-                            (status === "Active" ? "active" : "")
-                          }
+                          className={tokenStatus({
+                            state: status === "Active" ? "active" : "inactive",
+                          })}
                         >
                           {status}
                         </span>
                         {!development &&
                           status === "Active" &&
                           !token.service_id && (
-                            <span className="cell-note">
+                            <span className={styles.cellNote}>
                               Machine setup pending
                             </span>
                           )}
@@ -116,10 +126,10 @@ export function TokensPage({ development }: { development: boolean }) {
                           ? number.format(token.daily_limit)
                           : "Unlimited"}
                       </td>
-                      <td className="muted">{date(token.created_at)}</td>
+                      <td className={styles.muted}>{date(token.created_at)}</td>
                       <td>
                         <button
-                          className="icon-button danger-hover"
+                          className={iconButton({ danger: true })}
                           aria-label={"Revoke " + token.name}
                           disabled={!!token.revoked_at}
                           onClick={() => {
@@ -144,21 +154,21 @@ export function TokensPage({ development }: { development: boolean }) {
       )}
       {revoking && (
         <Modal title="Revoke this token?" onClose={() => setRevoking(null)}>
-          <p className="muted">
+          <p className={styles.muted}>
             New requests using <strong>{revoking.name}</strong> will stop
             working. Its usage history will remain.
           </p>
           {revoke.isError && (
-            <p className="form-error" role="alert">
+            <p className={styles.formError} role="alert">
               {revoke.error.message}
             </p>
           )}
-          <div className="dialog-actions">
-            <button className="button" onClick={() => setRevoking(null)}>
+          <div className={styles.dialogActions}>
+            <button className={button()} onClick={() => setRevoking(null)}>
               Cancel
             </button>
             <button
-              className="button danger"
+              className={button({ variant: "danger" })}
               disabled={revoke.isPending}
               onClick={() => revoke.mutate(revoking.id)}
             >
@@ -209,26 +219,29 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
     >
       {create.isSuccess ? (
         <>
-          <p className="muted">
+          <p className={styles.muted}>
             Save this key now. It belongs to{" "}
             <strong>{create.data.token.name}</strong> and won’t be shown again.
           </p>
-          <div className="secret">
+          <div className={styles.secret}>
             <code>{create.data.secret}</code>
             <button
-              className="icon-button"
+              className={iconButton()}
               onClick={() => void copy()}
               aria-label="Copy token"
             >
               {copied ? <Check size={16} /> : <Copy size={16} />}
             </button>
           </div>
-          <p className="small muted" role="status">
+          <p className={cx(styles.small, styles.muted)} role="status">
             {copyError ||
               (copied ? "Copied to clipboard." : "Store it somewhere private.")}
           </p>
-          <div className="dialog-actions">
-            <button className="button primary" onClick={onClose}>
+          <div className={styles.dialogActions}>
+            <button
+              className={button({ variant: "primary" })}
+              onClick={onClose}
+            >
               I’ve saved my key
             </button>
           </div>
@@ -240,7 +253,7 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
             create.mutate();
           }}
         >
-          <label className="field">
+          <label className={styles.field}>
             Token name
             <input
               autoFocus
@@ -252,7 +265,7 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
               autoComplete="off"
             />
           </label>
-          <label className="field">
+          <label className={styles.field}>
             Expires
             <select
               value={expiry}
@@ -265,16 +278,16 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
             </select>
           </label>
           {create.isError && (
-            <p className="form-error" role="alert">
+            <p className={styles.formError} role="alert">
               {create.error.message}
             </p>
           )}
-          <div className="dialog-actions">
-            <button className="button" type="button" onClick={onClose}>
+          <div className={styles.dialogActions}>
+            <button className={button()} type="button" onClick={onClose}>
               Cancel
             </button>
             <button
-              className="button primary"
+              className={button({ variant: "primary" })}
               disabled={create.isPending || !name.trim()}
             >
               {create.isPending ? "Creating…" : "Create token"}
@@ -315,7 +328,7 @@ function RenameTokenDialog({
           rename.mutate();
         }}
       >
-        <label className="field">
+        <label className={styles.field}>
           Token name
           <input
             autoFocus
@@ -325,21 +338,21 @@ function RenameTokenDialog({
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-        <p className="muted small">
+        <p className={cx(styles.muted, styles.small)}>
           This changes the leaderboard label. The key and its usage history stay
           the same.
         </p>
         {rename.isError && (
-          <p className="form-error" role="alert">
+          <p className={styles.formError} role="alert">
             {rename.error.message}
           </p>
         )}
-        <div className="dialog-actions">
-          <button type="button" className="button" onClick={onClose}>
+        <div className={styles.dialogActions}>
+          <button type="button" className={button()} onClick={onClose}>
             Cancel
           </button>
           <button
-            className="button primary"
+            className={button({ variant: "primary" })}
             disabled={rename.isPending || !name.trim()}
           >
             {rename.isPending ? "Saving…" : "Save name"}
@@ -366,7 +379,7 @@ function Modal({
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={styles.dialog}
       aria-labelledby="dialog-title"
       onCancel={onClose}
       onClick={(event) => {
@@ -382,10 +395,10 @@ function Modal({
         }
       }}
     >
-      <div className="dialog-heading">
+      <div className={styles.dialogHeading}>
         <h2 id="dialog-title">{title}</h2>
         <button
-          className="icon-button"
+          className={iconButton()}
           aria-label="Close dialog"
           onClick={onClose}
         >

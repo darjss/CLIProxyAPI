@@ -1,3 +1,6 @@
+import { styles } from "./styles";
+import { cx } from "../styled-system/css";
+import { iconButton, sidebar } from "../styled-system/recipes";
 import { lazy, Suspense, useState } from "react";
 import {
   QueryClient,
@@ -51,19 +54,19 @@ export function App() {
   const me = useQuery(queries.me());
   if (me.isPending)
     return (
-      <main className="entry-state">
+      <main className={styles.entryState}>
         <Loading label="Opening Pool…" />
       </main>
     );
   if (me.isError)
     return (
-      <main className="entry-state">
-        <div className="brand">
+      <main className={styles.entryState}>
+        <div className={styles.brand}>
           <Layers3 size={23} />
           Pool
         </div>
         <ErrorState error={me.error} retry={() => void me.refetch()} />
-        <p className="muted">
+        <p className={styles.muted}>
           Open Pool through your Cloudflare Access application, or start the
           loopback development server.
         </p>
@@ -92,29 +95,29 @@ function Workspace({ me }: { me: Me }) {
   const [page, setPage] = useState<Page>("overview");
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div className="app-shell">
-      <aside className={menuOpen ? "sidebar is-open" : "sidebar"}>
-        <a className="brand" href="/pool/" aria-label="Pool overview">
-          <span className="brand-mark">
+    <div className={styles.appShell}>
+      <aside className={menuOpen ? sidebar({ open: true }) : sidebar()}>
+        <a className={styles.brand} href="/pool/" aria-label="Pool overview">
+          <span className={styles.brandMark}>
             <Layers3 size={20} strokeWidth={1.7} />
           </span>
-          Pool<span className="brand-org">/ erxes</span>
+          Pool<span className={styles.brandOrg}>/ erxes</span>
         </a>
         <button
-          className="icon-button mobile-close"
+          className={cx(iconButton(), styles.mobileClose)}
           aria-label="Close navigation"
           onClick={() => setMenuOpen(false)}
         >
           <X size={18} />
         </button>
-        <div className="nav-caption">WORKSPACE</div>
+        <div className={styles.navCaption}>WORKSPACE</div>
         <nav aria-label="Main navigation">
           {navigation
             .filter((item) => item.id !== "admin" || me.identity.admin)
             .map((item) => (
               <button
                 key={item.id}
-                className={page === item.id ? "nav-item active" : "nav-item"}
+                className={styles.navItem}
                 aria-current={page === item.id ? "page" : undefined}
                 onClick={() => {
                   setPage(item.id);
@@ -123,17 +126,17 @@ function Workspace({ me }: { me: Me }) {
               >
                 <item.icon size={17} strokeWidth={1.7} />
                 {item.label}
-                {page === item.id && <span className="nav-dot" />}
+                {page === item.id && <span className={styles.navDot} />}
               </button>
             ))}
         </nav>
-        <div className="sidebar-bottom">
-          <div className="connection">
-            <span className="status-dot" />
+        <div className={styles.sidebarBottom}>
+          <div className={styles.connection}>
+            <span className={styles.statusDot} />
             {me.development ? "Local development" : "Cloudflare Access"}
           </div>
-          <div className="identity">
-            <div className="avatar">
+          <div className={styles.identity}>
+            <div className={styles.avatar}>
               {me.identity.email.slice(0, 1).toUpperCase()}
             </div>
             <div>
@@ -146,16 +149,16 @@ function Workspace({ me }: { me: Me }) {
       </aside>
       {menuOpen && (
         <button
-          className="nav-backdrop"
+          className={styles.navBackdrop}
           aria-label="Close navigation"
           onClick={() => setMenuOpen(false)}
         />
       )}
-      <div className="workspace">
-        <div className="topbar">
-          <div className="breadcrumb">
+      <div className={styles.workspace}>
+        <div className={styles.topbar}>
+          <div className={styles.breadcrumb}>
             <button
-              className="icon-button mobile-menu"
+              className={cx(iconButton(), styles.mobileMenu)}
               aria-label="Open navigation"
               onClick={() => setMenuOpen(true)}
             >
@@ -167,17 +170,17 @@ function Workspace({ me }: { me: Me }) {
               {navigation.find((item) => item.id === page)?.label}
             </strong>
           </div>
-          <div className="topbar-actions">
-            <span className="version">Claude + Codex</span>
+          <div className={styles.topbarActions}>
+            <span className={styles.version}>Claude + Codex</span>
             <button
-              className="icon-button"
+              className={iconButton()}
               aria-label="Refresh current data"
               onClick={() => void client.invalidateQueries()}
             >
               <RefreshCw size={15} />
             </button>
             <a
-              className="icon-button"
+              className={iconButton()}
               aria-label="Open source on GitHub"
               href="https://github.com/darjss/CLIProxyAPI"
               target="_blank"
@@ -188,13 +191,13 @@ function Workspace({ me }: { me: Me }) {
           </div>
         </div>
         {me.development && (
-          <div className="dev-banner">
-            <span className="status-dot" />
+          <div className={styles.devBanner}>
+            <span className={styles.statusDot} />
             Development mode · fixed local identity · not a production Access
             session
           </div>
         )}
-        <main className="page-content">
+        <main className={styles.pageContent}>
           <Suspense fallback={<Loading />}>
             {page === "overview" && (
               <OverviewPage onCreate={() => setPage("tokens")} />
@@ -205,9 +208,9 @@ function Workspace({ me }: { me: Me }) {
             {page === "admin" && me.identity.admin && <AdminPage />}
           </Suspense>
         </main>
-        <footer className="app-footer">
+        <footer className={styles.appFooter}>
           <span>
-            Pool <span className="footer-divider">/</span> Your shared AI
+            Pool <span className={styles.footerDivider}>/</span> Your shared AI
             gateway.
           </span>
           <span>

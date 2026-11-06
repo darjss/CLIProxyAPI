@@ -1,3 +1,5 @@
+import { styles } from "../styles";
+import { panel, tokenStatus } from "../../styled-system/recipes";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { dateTime, dollars, number, queries, type Period } from "../api";
@@ -28,15 +30,15 @@ export function UsagePage() {
       ) : requests.isPending ? (
         <Loading />
       ) : !requests.data.length ? (
-        <div className="panel">
+        <div className={panel()}>
           <EmptyState
             title="Nothing to inspect yet."
             description="Completed executions from your tokens will show up here, including reported usage on failed attempts."
           />
         </div>
       ) : (
-        <div className="panel table-panel">
-          <div className="table-scroll">
+        <div className={panel({ table: true })}>
+          <div className={styles.tableScroll}>
             <table>
               <thead>
                 <tr>
@@ -51,30 +53,30 @@ export function UsagePage() {
               <tbody>
                 {requests.data.map((event) => (
                   <tr key={event.id}>
-                    <td className="strong">
+                    <td className={styles.strong}>
                       {event.token_name}
-                      <span className="cell-note">
+                      <span className={styles.cellNote}>
                         {dateTime(event.timestamp)}
                       </span>
                     </td>
                     <td>
                       {event.model}
-                      <span className="cell-note">{event.provider}</span>
+                      <span className={styles.cellNote}>{event.provider}</span>
                     </td>
                     <td>{number.format(event.tokens)}</td>
-                    <td className="muted">
+                    <td className={styles.muted}>
                       {(event.latency_ms / 1000).toFixed(1)}s
                     </td>
-                    <td className="muted">
+                    <td className={styles.muted}>
                       {event.cost_micros === null
                         ? "Unpriced"
                         : dollars(event.cost_micros)}
                     </td>
                     <td>
                       <span
-                        className={
-                          "token-status " + (event.failed ? "failed" : "active")
-                        }
+                        className={tokenStatus({
+                          state: event.failed ? "failed" : "active",
+                        })}
                       >
                         {event.failed ? "Failed" : "Complete"}
                       </span>
@@ -86,7 +88,7 @@ export function UsagePage() {
           </div>
         </div>
       )}
-      <p className="footnote">
+      <p className={styles.footnote}>
         An execution is an upstream attempt. A retried request can have multiple
         executions; recorded token use is counted once per execution.
       </p>

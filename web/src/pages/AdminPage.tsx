@@ -1,3 +1,6 @@
+import { styles } from "../styles";
+import { cx } from "../../styled-system/css";
+import { button, panel, providerSymbol } from "../../styled-system/recipes";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Save } from "lucide-react";
@@ -24,10 +27,10 @@ export function AdminPage() {
         title="Administration"
         description="Shared accounts, named-token limits, and model prices."
       />
-      <section className="panel">
-        <div className="panel-heading">
+      <section className={panel()}>
+        <div className={styles.panelHeading}>
           <h2>Upstream accounts</h2>
-          <span className="subtle-badge">Read only</span>
+          <span className={styles.subtleBadge}>Read only</span>
         </div>
         {accounts.isError ? (
           <ErrorState error={accounts.error} />
@@ -39,34 +42,47 @@ export function AdminPage() {
             description="Use the existing CLI OAuth login commands to add Claude and Codex accounts. They will appear here after the runtime loads them."
           />
         ) : (
-          <div className="account-list">
+          <div className={styles.accountList}>
             {accounts.data.map((account) => (
-              <div className="account-row" key={account.id}>
-                <span className={"provider-symbol " + account.provider}>
+              <div className={styles.accountRow} key={account.id}>
+                <span
+                  className={providerSymbol({
+                    provider:
+                      account.provider === "claude"
+                        ? "claude"
+                        : account.provider === "codex"
+                          ? "codex"
+                          : "other",
+                  })}
+                >
                   {account.provider === "claude" ? "✳" : "◈"}
                 </span>
                 <div>
                   <strong>{account.provider}</strong>
                   <code>{account.id}</code>
                 </div>
-                <span className="subtle-badge">
+                <span className={styles.subtleBadge}>
                   {account.disabled ? "Disabled" : account.status}
                 </span>
               </div>
             ))}
           </div>
         )}
-        <p className="footnote">
+        <p className={styles.footnote}>
           OAuth controls inside Pool are a later increment. No account secrets
           are exposed here.
         </p>
       </section>
-      <section className="panel">
-        <div className="panel-heading">
+      <section className={panel()}>
+        <div className={styles.panelHeading}>
           <h2>Token settings</h2>
-          <span className="muted small">0 means unlimited</span>
+          <span className={cx(styles.muted, styles.small)}>
+            0 means unlimited
+          </span>
         </div>
-        <p className="muted small section-description">
+        <p
+          className={cx(styles.muted, styles.small, styles.sectionDescription)}
+        >
           Bind an existing Cloudflare Access client ID for machine connections.
           Saving a binding does not create Cloudflare credentials. Limits apply
           to new requests after recorded daily usage reaches the cap.
@@ -76,11 +92,11 @@ export function AdminPage() {
         ) : tokens.isPending ? (
           <Loading />
         ) : !tokens.data.length ? (
-          <p className="muted small">
+          <p className={cx(styles.muted, styles.small)}>
             Create a token to configure its connection and limit.
           </p>
         ) : (
-          <div className="token-settings-list">
+          <div className={undefined}>
             {tokens.data
               .filter((token) => !token.revoked_at)
               .map((token) => (
@@ -98,12 +114,16 @@ export function AdminPage() {
           </div>
         )}
       </section>
-      <section className="panel">
-        <div className="panel-heading">
+      <section className={panel()}>
+        <div className={styles.panelHeading}>
           <h2>API-equivalent token prices</h2>
-          <span className="muted small">USD / 1 million tokens</span>
+          <span className={cx(styles.muted, styles.small)}>
+            USD / 1 million tokens
+          </span>
         </div>
-        <p className="muted small section-description">
+        <p
+          className={cx(styles.muted, styles.small, styles.sectionDescription)}
+        >
           Set exact provider and model names. Each save creates a new price
           version; previous usage keeps its original estimate. No prices are
           guessed.
@@ -118,7 +138,7 @@ export function AdminPage() {
         ) : prices.isPending ? (
           <Loading />
         ) : prices.data.length > 0 ? (
-          <div className="table-scroll">
+          <div className={styles.tableScroll}>
             <table>
               <thead>
                 <tr>
@@ -132,9 +152,9 @@ export function AdminPage() {
               <tbody>
                 {prices.data.map((price) => (
                   <tr key={price.id}>
-                    <td className="strong">
+                    <td className={styles.strong}>
                       {price.model}
-                      <span className="cell-note">
+                      <span className={styles.cellNote}>
                         {price.provider} · version {price.id}
                       </span>
                     </td>
@@ -144,7 +164,7 @@ export function AdminPage() {
                       price.cache_read,
                       price.cache_write,
                     ].map((value, i) => (
-                      <td key={i} className="muted">
+                      <td key={i} className={styles.muted}>
                         ${value.toLocaleString()}
                       </td>
                     ))}
@@ -154,7 +174,7 @@ export function AdminPage() {
             </table>
           </div>
         ) : (
-          <p className="muted small">
+          <p className={cx(styles.muted, styles.small)}>
             No model rates configured. Usage remains unpriced until a matching
             rate exists.
           </p>
@@ -186,17 +206,17 @@ function TokenSettings({
   });
   return (
     <form
-      className="token-settings"
+      className={styles.tokenSettings}
       onSubmit={(e) => {
         e.preventDefault();
         save.mutate();
       }}
     >
-      <div className="setting-name">
+      <div className={styles.settingName}>
         <strong>{token.name}</strong>
         <code>{token.prefix}…</code>
       </div>
-      <label className="field">
+      <label className={styles.field}>
         Access client ID
         <input
           value={serviceID}
@@ -205,7 +225,7 @@ function TokenSettings({
           maxLength={256}
         />
       </label>
-      <label className="field limit-field">
+      <label className={styles.field}>
         Daily token cap
         <input
           type="number"
@@ -218,7 +238,7 @@ function TokenSettings({
         />
       </label>
       <button
-        className="button"
+        className={button()}
         disabled={save.isPending}
         aria-label={"Save settings for " + token.name}
       >
@@ -226,7 +246,7 @@ function TokenSettings({
         {save.isPending ? "Saving…" : "Save"}
       </button>
       {save.isError && (
-        <p className="form-error" role="alert">
+        <p className={styles.formError} role="alert">
           {save.error.message}
         </p>
       )}
@@ -262,9 +282,9 @@ function PriceForm({ onSaved }: { onSaved: () => void }) {
     save.mutate();
   }
   return (
-    <form className="price-form" onSubmit={submit}>
-      <div className="price-identity">
-        <label className="field">
+    <form className={styles.priceForm} onSubmit={submit}>
+      <div className={styles.priceIdentity}>
+        <label className={styles.field}>
           Provider
           <select
             value={provider}
@@ -274,7 +294,7 @@ function PriceForm({ onSaved }: { onSaved: () => void }) {
             <option value="claude">Claude</option>
           </select>
         </label>
-        <label className="field">
+        <label className={styles.field}>
           Model ID
           <input
             value={model}
@@ -285,7 +305,7 @@ function PriceForm({ onSaved }: { onSaved: () => void }) {
           />
         </label>
       </div>
-      <div className="price-rates">
+      <div className={styles.priceRates}>
         {(
           Object.entries({
             input: "Uncached input",
@@ -294,7 +314,7 @@ function PriceForm({ onSaved }: { onSaved: () => void }) {
             cache_write: "Cache write",
           }) as [keyof typeof rates, string][]
         ).map(([key, label]) => (
-          <label key={key} className="field">
+          <label key={key} className={styles.field}>
             {label}
             <input
               type="number"
@@ -311,13 +331,15 @@ function PriceForm({ onSaved }: { onSaved: () => void }) {
           </label>
         ))}
       </div>
-      <div className="inline-actions">
-        <button className="button" disabled={save.isPending}>
+      <div className={styles.inlineActions}>
+        <button className={button()} disabled={save.isPending}>
           {save.isPending ? "Saving…" : "Save model price"}
         </button>
         <span
           role="status"
-          className={save.isError ? "form-error" : "small muted"}
+          className={
+            save.isError ? styles.formError : cx(styles.small, styles.muted)
+          }
         >
           {save.isError
             ? save.error.message
