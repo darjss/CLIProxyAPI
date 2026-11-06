@@ -1,9 +1,10 @@
 import { styles } from "../styles";
+import { QuotaSection } from "../QuotaSection";
 import { cx } from "../../styled-system/css";
-import { button, panel, providerSymbol } from "../../styled-system/recipes";
+import { button, panel } from "../../styled-system/recipes";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Clock3, Plus } from "lucide-react";
+import { ArrowUpRight, Plus } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -23,7 +24,13 @@ import {
   Stat,
 } from "../components";
 
-export function OverviewPage({ onCreate }: { onCreate: () => void }) {
+export function OverviewPage({
+  onCreate,
+  admin,
+}: {
+  onCreate: () => void;
+  admin: boolean;
+}) {
   const [period, setPeriod] = useState<Period>("week");
   const overview = useQuery(queries.overview(period));
   const activity = useQuery(queries.activity(period));
@@ -79,51 +86,7 @@ export function OverviewPage({ onCreate }: { onCreate: () => void }) {
               }
             />
           </section>
-          <div className={styles.sectionHeading}>
-            <h2>Shared quota</h2>
-            <span className={cx(styles.muted, styles.small)}>
-              Admin-maintained accounts
-            </span>
-          </div>
-          <div className={styles.providerGrid}>
-            {(["claude", "codex"] as const).map((provider) => (
-              <section key={provider} className={panel()}>
-                <div className={styles.panelHeading}>
-                  <div className={styles.providerName}>
-                    <span
-                      className={providerSymbol({ provider })}
-                      aria-hidden="true"
-                    >
-                      {provider === "claude" ? "✳" : "◈"}
-                    </span>
-                    <h3>{provider === "claude" ? "Claude" : "Codex"}</h3>
-                    <span className={styles.countBadge}>
-                      {overview.data.accounts[provider] ?? 0} accounts
-                    </span>
-                  </div>
-                  <span className={styles.subtleBadge}>
-                    Awaiting quota collector
-                  </span>
-                </div>
-                <div className={styles.quotaUnknown}>
-                  —<span>remaining capacity</span>
-                </div>
-                <div className={styles.quotaPending}>
-                  <Clock3 size={16} />
-                  <p>
-                    Quota history and forecasts will appear when collection is
-                    connected. No balance has been inferred from token usage.
-                  </p>
-                </div>
-                <div className={styles.providerFoot}>
-                  <span>History</span>
-                  <span>Burn rate</span>
-                  <span>Next reset</span>
-                  <span>Not collected yet</span>
-                </div>
-              </section>
-            ))}
-          </div>
+          <QuotaSection admin={admin} />
         </>
       )}
       <section className={cx(panel(), styles.activityPanel)}>

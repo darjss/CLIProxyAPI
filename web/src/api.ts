@@ -45,6 +45,43 @@ export type UsageEvent = {
   cost_micros: number | null;
 };
 export type Day = { date: string; tokens: number; requests: number };
+export type QuotaPoint = { at: number; remaining: number | null };
+export type QuotaSample = {
+  account: string;
+  provider: string;
+  window: string;
+  period_seconds: number;
+  remaining: number;
+  reset_at: number;
+  observed_at: number;
+};
+export type QuotaAccount = {
+  id: string;
+  provider: string;
+  status: string;
+  checked_at: number;
+  windows: QuotaSample[];
+};
+export type QuotaPool = {
+  id: string;
+  provider: string;
+  window: string;
+  period_seconds: number;
+  accounts: number;
+  remaining: number;
+  capacity: number;
+  observed_at: number;
+  stale: boolean;
+  burn_per_hour: number | null;
+  next_reset: number;
+  history: QuotaPoint[];
+  projected: QuotaPoint[];
+};
+export type QuotaSnapshot = {
+  pools: QuotaPool[];
+  accounts: QuotaAccount[];
+  observed_at: number;
+};
 export type Account = {
   id: string;
   provider: string;
