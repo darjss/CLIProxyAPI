@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Copy } from "lucide-react";
 import { cx } from "../styled-system/css";
 import { button, panel } from "../styled-system/recipes";
@@ -10,37 +10,68 @@ const methods = {
     title: "Save configuration",
     description:
       "Recommended for Linux and macOS. Requires Python 3. Prompts for your token privately, backs up existing settings, and merges Pool into ~/.claude/settings.json. Stores your token locally with file permissions 600. Other settings are preserved.",
-    label: "Save config (recommended)",
+    label: "Save config",
   },
   session: {
     title: "Try one terminal session",
     description:
       "Works from Bash or Zsh on Linux and macOS. Prompts for your token privately and opens Claude Code for this session. Existing gateway settings in ~/.claude/settings.json can override these variables; use Save config if /status shows a different gateway.",
-    label: "One terminal session",
+    label: "Terminal",
   },
   config: {
     title: "Merge settings manually",
     description:
       "Merge this env object into ~/.claude/settings.json, keeping your other settings. Replace the token placeholder with your Pool API token. Keep the token in your user settings, outside your project repository.",
-    label: "Manual settings JSON",
+    label: "Settings JSON",
   },
   agent: {
     title: "Ask your coding agent",
     description:
       "Paste this prompt into your coding agent. It explains the configuration and asks you to enter the token privately on your computer.",
-    label: "Agent setup prompt",
+    label: "Agent prompt",
   },
 };
+type Method = keyof typeof methods;
+const methodKeys = Object.keys(methods) as Method[];
 
 export function ClaudeCodeSetup() {
-  const [method, setMethod] = useState<keyof typeof methods>("save");
-  const [model, setModel] = useState("gpt-6.1-sol");
-  const [fastModel, setFastModel] = useState("gpt-6-luna");
+  const [method, setMethod] = useState<Method>("save");
+  const [opusModel, setOpusModel] = useState("claude-opus-5-5");
+  const [sonnetModel, setSonnetModel] = useState("claude-sonnet-5-5");
+  const setupId = useId();
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const baseURL = window.location.origin;
   const validModel = /^[a-zA-Z0-9][a-zA-Z0-9._:/()-]{0,199}$/;
   const valid =
-    validModel.test(model.trim()) && validModel.test(fastModel.trim());
-  const snippets = claudeCodeSetup(baseURL, model.trim(), fastModel.trim());
+    validModel.test(opusModel.trim()) && validModel.test(sonnetModel.trim());
+  const snippets = claudeCodeSetup(
+    baseURL,
+    opusModel.trim(),
+    sonnetModel.trim(),
+  );
+
+  function moveTab(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = (index + 1) % methodKeys.length;
+        break;
+      case "ArrowLeft":
+        next = (index + methodKeys.length - 1) % methodKeys.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = methodKeys.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    setMethod(methodKeys[next]);
+    tabRefs.current[next]?.focus();
+  }
 
   return (
     <section className={panel()} aria-labelledby="claude-code-setup">
@@ -84,29 +115,28 @@ export function ClaudeCodeSetup() {
           </p>
         </div>
         <details>
-          <summary>
-            Model settings · {model || "main"} / {fastModel || "fast"}
-          </summary>
+          <summary>Models · Opus 5.5 / Sonnet 5.5</summary>
           <p>
-            Defaults use the Codex pool. Enter model IDs served by your pool if
-            your administrator configures other models. Sonnet and Opus use the
-            main model; Haiku uses the fast model.
+            Opus 5.5 is the default model. Sonnet 5.5 handles the Sonnet and
+            Haiku aliases. Your pool needs a connected Claude account to serve
+            these models. Adjust the IDs if your administrator uses other
+            models.
           </p>
           <div className={styles.clientModelFields}>
             <label className={styles.field}>
-              Main model ID
+              Opus model ID
               <input
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
+                value={opusModel}
+                onChange={(event) => setOpusModel(event.target.value)}
                 maxLength={200}
                 spellCheck={false}
               />
             </label>
             <label className={styles.field}>
-              Fast model ID
+              Sonnet model ID
               <input
-                value={fastModel}
-                onChange={(event) => setFastModel(event.target.value)}
+                value={sonnetModel}
+                onChange={(event) => setSonnetModel(event.target.value)}
                 maxLength={200}
                 spellCheck={false}
               />
@@ -118,33 +148,50 @@ export function ClaudeCodeSetup() {
             </p>
           )}
         </details>
-        <label className={cx(styles.field, styles.setupMethod)}>
-          Setup method
-          <select
-            value={method}
-            onChange={(event) =>
-              setMethod(event.target.value as keyof typeof methods)
-            }
-          >
-            {Object.entries(methods).map(([value, item]) => (
-              <option key={value} value={value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p>{methods[method].description}</p>
-        {valid ? (
-          <CopySnippet
-            key={method}
-            label={methods[method].title}
-            value={snippets[method]}
-          />
-        ) : (
-          <p role="status">
-            Choose valid model IDs to generate the setup instructions.
-          </p>
-        )}
+        <div
+          className={styles.setupTabs}
+          role="tablist"
+          aria-label="Claude Code setup method"
+        >
+          {methodKeys.map((key, index) => (
+            <button
+              key={key}
+              ref={(element) => {
+                tabRefs.current[index] = element;
+              }}
+              type="button"
+              role="tab"
+              id={`${setupId}-${key}`}
+              aria-selected={method === key}
+              aria-controls={`${setupId}-panel`}
+              tabIndex={method === key ? 0 : -1}
+              onClick={() => setMethod(key)}
+              onKeyDown={(event) => moveTab(event, index)}
+            >
+              {methods[key].label}
+            </button>
+          ))}
+        </div>
+        <div
+          className={styles.setupPanel}
+          role="tabpanel"
+          id={`${setupId}-panel`}
+          aria-labelledby={`${setupId}-${method}`}
+          tabIndex={0}
+        >
+          <p>{methods[method].description}</p>
+          {valid ? (
+            <CopySnippet
+              key={method}
+              label={methods[method].title}
+              value={snippets[method]}
+            />
+          ) : (
+            <p role="status">
+              Choose valid model IDs to generate the setup instructions.
+            </p>
+          )}
+        </div>
         <div>
           <h3>3. Start a fresh session and verify</h3>
           <p>

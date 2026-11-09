@@ -3,15 +3,15 @@ export const installClaudeCode =
 
 export function claudeCodeSetup(
   baseURL: string,
-  model: string,
-  fastModel: string,
+  opusModel: string,
+  sonnetModel: string,
 ) {
   const env = {
     ANTHROPIC_BASE_URL: baseURL,
-    ANTHROPIC_MODEL: model,
-    ANTHROPIC_DEFAULT_SONNET_MODEL: model,
-    ANTHROPIC_DEFAULT_OPUS_MODEL: model,
-    ANTHROPIC_DEFAULT_HAIKU_MODEL: fastModel,
+    ANTHROPIC_MODEL: opusModel,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: sonnetModel,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: opusModel,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: sonnetModel,
   };
   const conflictingKeys = [
     "ANTHROPIC_API_KEY",
@@ -88,8 +88,8 @@ POOL_SESSION`,
     agent: `Set up Claude Code on my Linux/macOS computer to use Pool.
 
 Gateway: ${baseURL}
-Main model: ${model}
-Fast model: ${fastModel}
+Default / Opus model: ${opusModel}
+Sonnet / lightweight model: ${sonnetModel}
 
 1. Check whether Claude Code is installed. If needed, use the official installer:
    ${installClaudeCode}
