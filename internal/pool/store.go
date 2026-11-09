@@ -27,10 +27,9 @@ var ErrNotFound = errors.New("not found")
 
 // Identity is derived exclusively from a verified Access assertion.
 type Identity struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	Admin     bool   `json:"admin"`
-	ServiceID string `json:"-"`
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Admin bool   `json:"admin"`
 }
 
 type Token struct {
@@ -40,7 +39,6 @@ type Token struct {
 	CreatedAt  int64  `json:"created_at"`
 	ExpiresAt  int64  `json:"expires_at"`
 	RevokedAt  int64  `json:"revoked_at"`
-	ServiceID  string `json:"service_id"`
 	DailyLimit int64  `json:"daily_limit"`
 	OwnerID    string `json:"-"`
 }
@@ -196,11 +194,11 @@ func (s *Store) CreateToken(ctx context.Context, owner Identity, name string, ex
 	return t, secret, nil
 }
 
-const tokenColumns = `id,owner_id,name,prefix,created_at,expires_at,revoked_at,service_id,daily_limit`
+const tokenColumns = `id,owner_id,name,prefix,created_at,expires_at,revoked_at,daily_limit`
 
 func scanToken(row interface{ Scan(...any) error }) (Token, error) {
 	var t Token
-	err := row.Scan(&t.ID, &t.OwnerID, &t.Name, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.ServiceID, &t.DailyLimit)
+	err := row.Scan(&t.ID, &t.OwnerID, &t.Name, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.DailyLimit)
 	return t, err
 }
 
@@ -276,11 +274,11 @@ func changed(result sql.Result, err error) error {
 	return err
 }
 
-func (s *Store) ConfigureToken(ctx context.Context, id, serviceID string, limit int64) error {
-	if limit < 0 || len(serviceID) > 256 {
+func (s *Store) ConfigureToken(ctx context.Context, id string, limit int64) error {
+	if limit < 0 {
 		return errors.New("invalid token settings")
 	}
-	result, err := s.db.ExecContext(ctx, `UPDATE tokens SET service_id=?,daily_limit=? WHERE id=?`, strings.TrimSpace(serviceID), limit, id)
+	result, err := s.db.ExecContext(ctx, `UPDATE tokens SET daily_limit=? WHERE id=?`, limit, id)
 	return changed(result, err)
 }
 

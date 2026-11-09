@@ -13,7 +13,6 @@ export type Token = {
   created_at: number;
   expires_at: number;
   revoked_at: number;
-  service_id: string;
   daily_limit: number;
 };
 export type Aggregate = {

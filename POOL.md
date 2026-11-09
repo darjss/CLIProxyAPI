@@ -40,29 +40,27 @@ go run ./cmd/pool --config pool.example.yaml
 ```
 
 These values can also be provided using `--access-team`, `--access-audience`, and
-`--admins`. Authentication fails closed without a valid signed Access assertion
-for that issuer and audience. Access controls invitations and the identity
-provider; Pool does not implement a second signup/login flow.
+`--admins`. Dashboard routes under `/pool` require a valid signed Access assertion
+for that issuer and audience. Access controls invitations and the GitHub identity
+provider; Pool does not implement a second signup/login flow. Inference routes
+require only a valid Pool API token and do not require a browser session or
+Cloudflare service credentials.
 
 Browser users create a token by naming it. The secret is returned once and only
 a SHA-256 digest is stored. Token names are visible in shared rankings; owner
 emails and request history are private. Members can rename or revoke their own keys.
-Admins can configure daily per-token caps and bind existing Access machine
-credentials using the administration page.
+Admins can configure daily per-token caps using the administration page.
 
-Unattended clients send all three headers:
+Clients use `https://pool.erxes.tech/v1` as the OpenAI-compatible base URL and send:
 
 ```text
 Authorization: Bearer <pool-token>
-CF-Access-Client-Id: <access-client-id>
-CF-Access-Client-Secret: <access-client-secret>
 ```
 
-Create the Access service credential and Service Auth policy in Cloudflare, then
-save its Client ID on the matching Pool token. Pool verifies that the signed
-service identity matches that binding. A human Access identity can use only its
-own Pool tokens. A machine identity cannot access dashboard/admin routes.
-Credential provisioning and a local connector are not automated in this increment.
+Claude-compatible clients can send `X-Api-Key: <pool-token>` instead. The token
+identifies the owner and named client for usage tracking. Expiry, revocation, and
+daily limits apply without Cloudflare machine credentials. Treat the token as a
+password; anyone holding it can use its allocation.
 
 The runtime uses the existing config and OAuth account directory. For example:
 
@@ -118,9 +116,8 @@ reset intervals from burn calculations, and include only the next reported
 reset. The horizon ends before a second unreported reset (or at 72 hours).
 They are estimates, not promised capacity. New accounts start without history.
 
-Dashboard OAuth management, per-owner aggregate limits, usage retention
-automation, automated machine credential issuance, and the local client
-connector remain subsequent increments.
+Dashboard OAuth management, per-owner aggregate limits, and usage retention
+automation remain subsequent increments.
 
 ## Persistent deployment
 
@@ -132,13 +129,20 @@ Use a different production port when local development is running concurrently.
 
 `~/.config/pool/runtime.env` supplies the Access team, audience, and admin emails.
 The tunnel token belongs in `~/.config/pool/tunnel.token`, readable only by the
-service user. Use a dedicated named tunnel and enable Access assertion checks
-on its ingress rule. Do not put token contents in service command lines.
+service user. Use a dedicated named tunnel. Do not put token contents in service
+command lines.
 
-The Access application should admit the intended GitHub organization and explicit
-invites through the configured GitHub provider. A Service Auth policy can admit
-service tokens tagged `app=pool`; the origin still requires the matching Pool
-token binding. The development identity is never used by the production service.
+Scope the Access application to `pool.erxes.tech/pool`, including its subpaths,
+and admit the intended GitHub organization and explicit invites through the
+existing GitHub provider. In the tunnel, put a hostname rule matching
+`^/pool(/.*)?$` first and require its Access assertion. Follow it with a hostname
+rule forwarding the remaining paths to the same loopback origin without an
+Access requirement, then the catch-all 404 rule. Do not enable Access checks
+globally on the tunnel: that would block token-only inference.
+
+The origin separately verifies Access for dashboard routes, accepts Pool tokens
+on inference routes, and rejects management routes. `/` redirects to `/pool/`.
+The development identity is never used by the production service.
 
 ```sh
 systemctl --user daemon-reload
