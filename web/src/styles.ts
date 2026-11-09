@@ -1,6 +1,41 @@
 import { css } from "../styled-system/css";
 
 export const styles = {
+  clientSetup: css({
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "18px",
+    minWidth: 0,
+    fontSize: "12px",
+    color: "fg.muted",
+    overflowWrap: "anywhere",
+    "& h3": { color: "fg.default", fontSize: "12px", marginBottom: "6px" },
+    "& summary": {
+      cursor: "pointer",
+      color: "fg.default",
+      outlineOffset: "4px",
+    },
+    "& details > p": { marginTop: "10px" },
+    "& a": { textDecoration: "underline", textUnderlineOffset: "3px" },
+    "& code": { overflowWrap: "anywhere" },
+  }),
+  clientModelFields: css({
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "12px",
+    marginTop: "12px",
+    "@media (max-width: 600px)": { gridTemplateColumns: "minmax(0, 1fr)" },
+  }),
+  setupMethod: css({ marginBottom: 0, maxWidth: "340px", width: "100%" }),
+  snippetHeading: css({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: "12px",
+    color: "fg.default",
+  }),
+  setupSnippet: css({ maxHeight: "320px", overflow: "auto", marginTop: "8px" }),
   accountInstructions: css({
     marginTop: "20px",
     paddingTop: "16px",

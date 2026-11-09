@@ -11,6 +11,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound, Pencil, Plus, Trash2, X } from "lucide-react";
 import { api, date, number, useTokens, type Token } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader } from "../components";
+import { ClaudeCodeSetup } from "../ClaudeCodeSetup";
 
 export function TokensPage({ development }: { development: boolean }) {
   const tokens = useTokens();
@@ -141,6 +142,7 @@ export function TokensPage({ development }: { development: boolean }) {
           </div>
         </div>
       )}
+      <ClaudeCodeSetup />
       {creating && <CreateTokenDialog onClose={() => setCreating(false)} />}
       {renaming && (
         <RenameTokenDialog token={renaming} onClose={() => setRenaming(null)} />
