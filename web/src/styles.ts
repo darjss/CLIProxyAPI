@@ -1,6 +1,45 @@
 import { css } from "../styled-system/css";
 
 export const styles = {
+  accountInstructions: css({
+    marginTop: "20px",
+    paddingTop: "16px",
+    borderTop: "1px solid {colors.border}",
+    fontSize: "12px",
+    color: "fg.muted",
+    "& summary": {
+      cursor: "pointer",
+      color: "fg.default",
+      fontWeight: 550,
+      marginBottom: "12px",
+      outlineOffset: "4px",
+    },
+  }),
+  accountLoginControls: css({
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "12px",
+    "& label": { marginBottom: 0 },
+    "& button": { alignSelf: "flex-end" },
+  }),
+  loginCommand: css({
+    margin: "14px 0 0",
+    padding: "14px",
+    maxWidth: "100%",
+    overflowX: "auto",
+    border: "1px solid {colors.border}",
+    borderRadius: "6px",
+    background: "canvas",
+    lineHeight: 1.8,
+    outlineOffset: "4px",
+  }),
+  accountLoginSteps: css({
+    margin: "16px 0 0",
+    paddingLeft: "20px",
+    lineHeight: 1.7,
+    "& li + li": { marginTop: "8px" },
+  }),
   quotaControls: css({
     display: "flex",
     alignItems: "center",

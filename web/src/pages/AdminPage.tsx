@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Save } from "lucide-react";
 import { api, type Account, type Price, type Token } from "../api";
 import { EmptyState, ErrorState, Loading, PageHeader } from "../components";
+import { AccountInstructions } from "../AccountInstructions";
 
 export function AdminPage() {
   const client = useQueryClient();
@@ -39,7 +40,7 @@ export function AdminPage() {
         ) : !accounts.data.length ? (
           <EmptyState
             title="Connect the pool."
-            description="Use the existing CLI OAuth login commands to add Claude and Codex accounts. They will appear here after the runtime loads them."
+            description="Follow the connection instructions below to add a Claude or Codex account to the shared pool."
           />
         ) : (
           <div className={styles.accountList}>
@@ -68,10 +69,7 @@ export function AdminPage() {
             ))}
           </div>
         )}
-        <p className={styles.footnote}>
-          OAuth controls inside Pool are a later increment. No account secrets
-          are exposed here.
-        </p>
+        <AccountInstructions />
       </section>
       <section className={panel()}>
         <div className={styles.panelHeading}>
