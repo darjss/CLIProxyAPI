@@ -186,3 +186,6 @@ export const periodLabels: Record<Period, string> = {
   month: "This month (UTC)",
   all: "All time",
 };
+export const periodOptions = (Object.keys(periodLabels) as Period[]).map(
+  (value) => ({ value, label: periodLabels[value] }),
+);

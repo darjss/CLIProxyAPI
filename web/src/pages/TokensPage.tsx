@@ -1,19 +1,33 @@
-import { styles } from "../styles";
-import { cx } from "../../styled-system/css";
-import {
-  button,
-  iconButton,
-  panel,
-  tokenStatus,
-} from "../../styled-system/recipes";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, KeyRound, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Copy, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import { css, cx } from "../../styled-system/css";
+import { button, field, iconButton } from "../../styled-system/recipes";
 import { api, date, number, useTokens, type Token } from "../api";
-import { EmptyState, ErrorState, Loading, PageHeader } from "../components";
-import { ClaudeCodeSetup } from "../ClaudeCodeSetup";
+import {
+  EmptyState,
+  ErrorState,
+  Loading,
+  Modal,
+  PageHeader,
+  actions,
+  caption,
+  card,
+  formError,
+  label,
+  primaryCell,
+  table,
+  tableScroll,
+  useCopy,
+} from "../ui";
 
-export function TokensPage({ development }: { development: boolean }) {
+function status(token: Token, now: number) {
+  if (token.revoked_at) return "Revoked";
+  if (token.expires_at && token.expires_at <= now) return "Expired";
+  return "Active";
+}
+
+export default function TokensPage({ development }: { development: boolean }) {
   const tokens = useTokens();
   const client = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -28,103 +42,131 @@ export function TokensPage({ development }: { development: boolean }) {
     },
   });
   const now = Math.floor(Date.now() / 1000);
+  const active =
+    tokens.data?.filter((token) => status(token, now) === "Active").length ?? 0;
+
   return (
     <>
       <PageHeader
-        title="API tokens"
-        description="A name for every client. A separate key for every connection."
+        title="API Tokens"
+        meta={tokens.data && `${active} active · ${tokens.data.length} total`}
       >
+        <a href="#/setup" className={button()}>
+          <Zap size={16} />
+          Quick Start
+        </a>
         <button
           className={button({ variant: "primary" })}
           onClick={() => setCreating(true)}
         >
-          <Plus size={15} />
+          <Plus size={16} />
           Create token
         </button>
       </PageHeader>
-      <div className={styles.notice}>
-        <KeyRound size={16} />
-        <p>
-          {development
-            ? "Use your token as the API key against this loopback server."
-            : "Use your token as the API key in Claude, Codex, or any compatible client. Only the dashboard requires GitHub login."}
-        </p>
-      </div>
+      <p className={cx(caption, css({ mt: "-12px", mb: "24px" }))}>
+        {development
+          ? "Use your token as the API key against this loopback server."
+          : "Use your token as the API key in Claude, Codex, or any compatible client. Only the dashboard requires GitHub login."}
+      </p>
       {tokens.isError ? (
         <ErrorState error={tokens.error} retry={() => void tokens.refetch()} />
       ) : tokens.isPending ? (
         <Loading />
       ) : !tokens.data.length ? (
-        <div className={panel()}>
+        <div className={card}>
           <EmptyState
             title="Make your first connection."
             description="Name a token after the person, machine, or project using it."
           >
-            <button className={button()} onClick={() => setCreating(true)}>
-              <Plus size={14} />
+            <button
+              className={button({ variant: "primary" })}
+              onClick={() => setCreating(true)}
+            >
+              <Plus size={16} />
               Create token
             </button>
           </EmptyState>
         </div>
       ) : (
-        <div className={panel({ table: true })}>
-          <div className={styles.tableScroll}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Key</th>
-                  <th>Status</th>
-                  <th>Daily limit</th>
-                  <th>Created</th>
-                  <th>
-                    <span className={styles.srOnly}>Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {tokens.data.map((token) => {
-                  const status = token.revoked_at
-                    ? "Revoked"
-                    : token.expires_at && token.expires_at <= now
-                      ? "Expired"
-                      : "Active";
-                  return (
-                    <tr key={token.id}>
-                      <td className={styles.strong}>
-                        <span className={styles.tokenName}>
-                          {token.name}
-                          <button
-                            className={iconButton()}
-                            aria-label={"Rename " + token.name}
-                            onClick={() => setRenaming(token)}
-                          >
-                            <Pencil size={12} />
-                          </button>
-                        </span>
-                      </td>
-                      <td>
-                        <code>{token.prefix}…</code>
-                      </td>
-                      <td>
-                        <span
-                          className={tokenStatus({
-                            state: status === "Active" ? "active" : "inactive",
-                          })}
-                        >
-                          {status}
-                        </span>
-                      </td>
-                      <td>
-                        {token.daily_limit
-                          ? number.format(token.daily_limit)
-                          : "Unlimited"}
-                      </td>
-                      <td className={styles.muted}>{date(token.created_at)}</td>
-                      <td>
+        <div className={cx(card, tableScroll)}>
+          <table className={table}>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Key</th>
+                <th>Status</th>
+                <th>Daily limit</th>
+                <th>Created</th>
+                <th>Expires</th>
+                <th>
+                  <span className={css({ srOnly: true })}>Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {tokens.data.map((token) => {
+                const state = status(token, now);
+                return (
+                  <tr key={token.id}>
+                    <td className={primaryCell}>{token.name}</td>
+                    <td>
+                      <code className={css({ fontSize: "13px" })}>
+                        {token.prefix}…
+                      </code>
+                    </td>
+                    <td>
+                      <span
+                        className={css({
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          _before: {
+                            content: '""',
+                            width: "7px",
+                            height: "7px",
+                            borderRadius: "full",
+                            background: "currentColor",
+                          },
+                        })}
+                        style={{
+                          color: state === "Active" ? "#4fbf7f" : "#68686e",
+                        }}
+                      >
+                        {state}
+                      </span>
+                    </td>
+                    <td>
+                      {token.daily_limit
+                        ? number.format(token.daily_limit)
+                        : "Unlimited"}
+                    </td>
+                    <td>{date(token.created_at)}</td>
+                    <td>
+                      {token.expires_at ? date(token.expires_at) : "Never"}
+                    </td>
+                    <td>
+                      <div
+                        className={css({
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: "4px",
+                        })}
+                      >
                         <button
-                          className={iconButton({ danger: true })}
+                          className={iconButton()}
+                          aria-label={"Rename " + token.name}
+                          title="Rename"
+                          onClick={() => setRenaming(token)}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          className={cx(
+                            iconButton(),
+                            css({ _hover: { color: "bad" } }),
+                          )}
                           aria-label={"Revoke " + token.name}
+                          title="Revoke"
                           disabled={!!token.revoked_at}
                           onClick={() => {
                             revoke.reset();
@@ -133,32 +175,32 @@ export function TokensPage({ development }: { development: boolean }) {
                         >
                           <Trash2 size={15} />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
-      <ClaudeCodeSetup />
       {creating && <CreateTokenDialog onClose={() => setCreating(false)} />}
       {renaming && (
         <RenameTokenDialog token={renaming} onClose={() => setRenaming(null)} />
       )}
       {revoking && (
         <Modal title="Revoke this token?" onClose={() => setRevoking(null)}>
-          <p className={styles.muted}>
-            New requests using <strong>{revoking.name}</strong> will stop
-            working. Its usage history will remain.
+          <p className={caption}>
+            New requests using{" "}
+            <strong className={css({ color: "fg" })}>{revoking.name}</strong>{" "}
+            will stop working. Its usage history will remain.
           </p>
           {revoke.isError && (
-            <p className={styles.formError} role="alert">
+            <p className={formError} role="alert">
               {revoke.error.message}
             </p>
           )}
-          <div className={styles.dialogActions}>
+          <div className={actions}>
             <button className={button()} onClick={() => setRevoking(null)}>
               Cancel
             </button>
@@ -180,8 +222,7 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
   const client = useQueryClient();
   const [name, setName] = useState("");
   const [expiry, setExpiry] = useState("0");
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState("");
+  const { copied, error, copy } = useCopy();
   const create = useMutation({
     mutationFn: () =>
       api<{ token: Token; secret: string }>("/tokens", {
@@ -196,100 +237,113 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
     onSuccess: () => client.invalidateQueries({ queryKey: ["tokens"] }),
     gcTime: 0,
   });
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(create.data!.secret);
-      setCopied(true);
-      setCopyError("");
-    } catch {
-      setCopyError(
-        "Copy was unavailable. Select the key and copy it manually.",
-      );
-    }
+
+  if (create.isSuccess) {
+    const secret = create.data.secret;
+    return (
+      <Modal title="Your token is ready." onClose={onClose}>
+        <p className={caption}>
+          Save this key now. It belongs to{" "}
+          <strong className={css({ color: "fg" })}>
+            {create.data.token.name}
+          </strong>{" "}
+          and won’t be shown again.
+        </p>
+        <div
+          className={css({
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            margin: "16px 0 8px",
+            padding: "6px 6px 6px 14px",
+            borderRadius: "12px",
+            background: "canvas",
+            border: "1px solid token(colors.edge)",
+          })}
+        >
+          <code
+            className={css({
+              flex: 1,
+              fontSize: "13px",
+              overflowWrap: "anywhere",
+              userSelect: "all",
+            })}
+          >
+            {secret}
+          </code>
+          <button
+            className={iconButton()}
+            onClick={() => void copy(secret)}
+            aria-label="Copy token"
+          >
+            {copied === secret ? <Check size={16} /> : <Copy size={16} />}
+          </button>
+        </div>
+        <p className={caption} role="status">
+          {error ||
+            (copied === secret
+              ? "Copied to clipboard."
+              : "Store it somewhere private.")}
+        </p>
+        <div className={actions}>
+          <button className={button({ variant: "primary" })} onClick={onClose}>
+            I’ve saved my key
+          </button>
+        </div>
+      </Modal>
+    );
   }
   return (
-    <Modal
-      title={create.isSuccess ? "Your token is ready." : "Create an API token"}
-      onClose={onClose}
-    >
-      {create.isSuccess ? (
-        <>
-          <p className={styles.muted}>
-            Save this key now. It belongs to{" "}
-            <strong>{create.data.token.name}</strong> and won’t be shown again.
+    <Modal title="Create an API token" onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          create.mutate();
+        }}
+      >
+        <label className={label}>
+          Token name
+          <input
+            className={field()}
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            maxLength={80}
+            placeholder="Darjs laptop"
+            autoComplete="off"
+          />
+        </label>
+        <label className={label}>
+          Expires
+          <select
+            className={field()}
+            value={expiry}
+            onChange={(event) => setExpiry(event.target.value)}
+          >
+            <option value="0">Never</option>
+            <option value="7">In 7 days</option>
+            <option value="30">In 30 days</option>
+            <option value="90">In 90 days</option>
+          </select>
+        </label>
+        {create.isError && (
+          <p className={formError} role="alert">
+            {create.error.message}
           </p>
-          <div className={styles.secret}>
-            <code>{create.data.secret}</code>
-            <button
-              className={iconButton()}
-              onClick={() => void copy()}
-              aria-label="Copy token"
-            >
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-            </button>
-          </div>
-          <p className={cx(styles.small, styles.muted)} role="status">
-            {copyError ||
-              (copied ? "Copied to clipboard." : "Store it somewhere private.")}
-          </p>
-          <div className={styles.dialogActions}>
-            <button
-              className={button({ variant: "primary" })}
-              onClick={onClose}
-            >
-              I’ve saved my key
-            </button>
-          </div>
-        </>
-      ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            create.mutate();
-          }}
-        >
-          <label className={styles.field}>
-            Token name
-            <input
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              required
-              maxLength={80}
-              placeholder="Darjs laptop"
-              autoComplete="off"
-            />
-          </label>
-          <label className={styles.field}>
-            Expires
-            <select
-              value={expiry}
-              onChange={(event) => setExpiry(event.target.value)}
-            >
-              <option value="0">Never</option>
-              <option value="7">In 7 days</option>
-              <option value="30">In 30 days</option>
-              <option value="90">In 90 days</option>
-            </select>
-          </label>
-          {create.isError && (
-            <p className={styles.formError} role="alert">
-              {create.error.message}
-            </p>
-          )}
-          <div className={styles.dialogActions}>
-            <button className={button()} type="button" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              className={button({ variant: "primary" })}
-              disabled={create.isPending || !name.trim()}
-            >
-              {create.isPending ? "Creating…" : "Create token"}
-            </button>
-          </div>
-        </form>
-      )}
+        )}
+        <div className={actions}>
+          <button className={button()} type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className={button({ variant: "primary" })}
+            disabled={create.isPending || !name.trim()}
+          >
+            {create.isPending ? "Creating…" : "Create token"}
+          </button>
+        </div>
+      </form>
     </Modal>
   );
 }
@@ -318,31 +372,32 @@ function RenameTokenDialog({
   return (
     <Modal title="Rename token" onClose={onClose}>
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
+        onSubmit={(event) => {
+          event.preventDefault();
           rename.mutate();
         }}
       >
-        <label className={styles.field}>
+        <label className={label}>
           Token name
           <input
+            className={field()}
             autoFocus
             required
             maxLength={80}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(event) => setName(event.target.value)}
           />
         </label>
-        <p className={cx(styles.muted, styles.small)}>
+        <p className={caption}>
           This changes the leaderboard label. The key and its usage history stay
           the same.
         </p>
         {rename.isError && (
-          <p className={styles.formError} role="alert">
+          <p className={formError} role="alert">
             {rename.error.message}
           </p>
         )}
-        <div className={styles.dialogActions}>
+        <div className={actions}>
           <button type="button" className={button()} onClick={onClose}>
             Cancel
           </button>
@@ -355,52 +410,5 @@ function RenameTokenDialog({
         </div>
       </form>
     </Modal>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    ref.current?.showModal();
-  }, []);
-  return (
-    <dialog
-      ref={ref}
-      className={styles.dialog}
-      aria-labelledby="dialog-title"
-      onCancel={onClose}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          const bounds = event.currentTarget.getBoundingClientRect();
-          if (
-            event.clientX < bounds.left ||
-            event.clientX > bounds.right ||
-            event.clientY < bounds.top ||
-            event.clientY > bounds.bottom
-          )
-            onClose();
-        }
-      }}
-    >
-      <div className={styles.dialogHeading}>
-        <h2 id="dialog-title">{title}</h2>
-        <button
-          className={iconButton()}
-          aria-label="Close dialog"
-          onClick={onClose}
-        >
-          <X size={18} />
-        </button>
-      </div>
-      {children}
-    </dialog>
   );
 }
