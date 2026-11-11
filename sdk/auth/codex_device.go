@@ -84,11 +84,15 @@ func (a *CodexAuthenticator) loginWithDeviceFlow(ctx context.Context, cfg *confi
 
 	pollInterval := parseCodexDevicePollInterval(userCodeResp.Interval)
 
-	fmt.Println("Starting Codex device authentication...")
-	fmt.Printf("Codex device URL: %s\n", codexDeviceVerificationURL)
-	fmt.Printf("Codex device code: %s\n", deviceCode)
+	if opts.DeviceCode != nil {
+		opts.DeviceCode(codexDeviceVerificationURL, deviceCode)
+	} else {
+		fmt.Println("Starting Codex device authentication...")
+		fmt.Printf("Codex device URL: %s\n", codexDeviceVerificationURL)
+		fmt.Printf("Codex device code: %s\n", deviceCode)
+	}
 
-	if !opts.NoBrowser {
+	if opts.DeviceCode == nil && !opts.NoBrowser {
 		if !browser.IsAvailable() {
 			log.Warn("No browser available; please open the device URL manually")
 		} else if errOpen := browser.OpenURL(codexDeviceVerificationURL); errOpen != nil {

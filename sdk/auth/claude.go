@@ -60,6 +60,9 @@ func (a *ClaudeAuthenticator) Login(ctx context.Context, cfg *config.Config, opt
 	if err != nil {
 		return nil, fmt.Errorf("claude state generation failed: %w", err)
 	}
+	if opts.CallbackURL != nil {
+		return a.loginWithCallback(ctx, cfg, opts, state, pkceCodes)
+	}
 
 	oauthServer := claude.NewOAuthServer(callbackPort)
 	if err = oauthServer.Start(); err != nil {
@@ -181,19 +184,44 @@ waitForCallback:
 	}
 
 	if result.State != state {
-		log.Errorf("State mismatch: expected %s, got %s", state, result.State)
 		return nil, claude.NewAuthenticationError(claude.ErrInvalidState, fmt.Errorf("state mismatch"))
 	}
 
 	log.Debug("Claude authorization code received; exchanging for tokens")
-	log.Debugf("Code: %s, State: %s", result.Code[:min(20, len(result.Code))], state)
 
 	authBundle, err := authSvc.ExchangeCodeForTokens(ctx, result.Code, state, pkceCodes)
 	if err != nil {
 		log.Errorf("Token exchange failed: %v", err)
 		return nil, claude.NewAuthenticationError(claude.ErrCodeExchangeFailed, err)
 	}
+	return a.buildAuthRecord(authSvc, authBundle)
+}
 
+func (a *ClaudeAuthenticator) loginWithCallback(ctx context.Context, cfg *config.Config, opts *LoginOptions, state string, pkceCodes *claude.PKCECodes) (*coreauth.Auth, error) {
+	authSvc := claude.NewClaudeAuth(cfg)
+	authURL, state, err := authSvc.GenerateAuthURL(state, pkceCodes)
+	if err != nil {
+		return nil, fmt.Errorf("generate Claude login URL: %w", err)
+	}
+	input, err := opts.CallbackURL(ctx, authURL)
+	if err != nil {
+		return nil, err
+	}
+	callback, err := misc.ParseOAuthCallback(input)
+	if err != nil || callback == nil || callback.State != state {
+		return nil, fmt.Errorf("invalid Claude login callback")
+	}
+	if callback.Error != "" {
+		return nil, fmt.Errorf("Claude authorization was denied")
+	}
+	authBundle, err := authSvc.ExchangeCodeForTokens(ctx, callback.Code, state, pkceCodes)
+	if err != nil {
+		return nil, fmt.Errorf("exchange Claude authorization code: %w", err)
+	}
+	return a.buildAuthRecord(authSvc, authBundle)
+}
+
+func (a *ClaudeAuthenticator) buildAuthRecord(authSvc *claude.ClaudeAuth, authBundle *claude.ClaudeAuthBundle) (*coreauth.Auth, error) {
 	tokenStorage := authSvc.CreateTokenStorage(authBundle)
 
 	if tokenStorage == nil || tokenStorage.Email == "" {

@@ -19,6 +19,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pool"
 	_ "github.com/router-for-me/CLIProxyAPI/v8/internal/translator"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
@@ -51,6 +52,10 @@ func run() error {
 	}
 	if cfg.Home.Enabled {
 		return errors.New("Pool currently supports standalone shared pools, not Home mode")
+	}
+	cfg.AuthDir, err = util.ResolveAuthDir(cfg.AuthDir)
+	if err != nil {
+		return fmt.Errorf("resolve account directory: %w", err)
 	}
 	// Tunnel ingress connects locally. Do not expose the origin to the public network.
 	cfg.Host = "127.0.0.1"
@@ -85,6 +90,7 @@ func run() error {
 	usage.RegisterNamedPlugin(pool.ProviderID, store)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	portal.Logins = pool.NewAccountLogins(ctx, cfg)
 	defer func() {
 		cancel()
 		if portal.Quota != nil {
