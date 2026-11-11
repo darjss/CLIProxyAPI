@@ -62,7 +62,17 @@ identifies the owner and named client for usage tracking. Expiry, revocation, an
 daily limits apply without Cloudflare machine credentials. Treat the token as a
 password; anyone holding it can use its allocation.
 
-The runtime uses the existing config and OAuth account directory. For example:
+Admins can connect accounts in **Administration → Upstream accounts → Connect an account**.
+Choose Claude or Codex and click Connect. Claude opens a provider sign-in page;
+after authorizing, paste the full localhost redirect URL into Pool and click
+Finish connection. Codex displays a device code to enter on OpenAI's sign-in page,
+then detects approval automatically. Passwords and MFA codes stay on the provider's
+page. Login attempts expire after five minutes for Claude or 15 minutes for Codex,
+can be cancelled, and resume after refreshing the same browser tab.
+
+Credentials stay on the server in the configured OAuth account directory. Pool
+loads saved accounts automatically, and quota updates within two minutes.
+The existing CLI also supports account login:
 
 ```sh
 go run ./cmd/server --config pool.example.yaml --claude-login
@@ -70,7 +80,9 @@ go run ./cmd/server --config pool.example.yaml --codex-device-login
 ```
 
 The member-facing host does not expose the legacy management console or APIs.
-Use the existing CLI to manage upstream logins for now.
+Account login endpoints under `/pool/api/admin/logins` require a verified admin
+identity. Only the admin who starts a login can read it, submit its callback, or
+cancel it. Pending sessions remain in memory and are lost on a server restart.
 
 ## Usage and estimates
 

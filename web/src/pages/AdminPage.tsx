@@ -4,8 +4,8 @@ import { Check, Save } from "lucide-react";
 import { css, cx } from "../../styled-system/css";
 import { button, field } from "../../styled-system/recipes";
 import { api, type Account, type Price, type Token } from "../api";
+import ConnectAccount from "../ConnectAccount";
 import {
-  CodeBlock,
   EmptyState,
   ErrorState,
   Loading,
@@ -52,7 +52,7 @@ export default function AdminPage() {
           gap: "20px",
         })}
       >
-        <Section title="Upstream accounts" meta="Read only">
+        <Section title="Upstream accounts" meta="Shared provider accounts">
           {accounts.isError ? (
             <ErrorState error={accounts.error} />
           ) : accounts.isPending ? (
@@ -60,7 +60,7 @@ export default function AdminPage() {
           ) : !accounts.data.length ? (
             <EmptyState
               title="Connect the pool."
-              description="Follow the connection instructions below to add a Claude or Codex account to the shared pool."
+              description="Connect a Claude or Codex account below to share it with the pool."
             />
           ) : (
             <div className={tableScroll}>
@@ -246,115 +246,6 @@ function Section({
   );
 }
 
-const logins = {
-  claude: {
-    flag: "--claude-login",
-    steps: [
-      "Open the login URL printed in the terminal, sign in to the Claude account you want to share, and authorize access.",
-      "If the localhost callback page fails to load, copy its full URL from the address bar and paste it into the terminal when prompted.",
-      "Wait for authentication to be saved. Complete the login within five minutes; rerun the command if it expires.",
-    ],
-  },
-  codex: {
-    flag: "--codex-device-login",
-    steps: [
-      "Open the device login URL printed in the terminal and enter the device code shown alongside it.",
-      "Sign in to the OpenAI account you want to share and authorize access.",
-      "Keep the terminal open until authentication is saved. Complete the login within 15 minutes; rerun the command if it expires.",
-    ],
-  },
-};
-type LoginProvider = keyof typeof logins;
-
-function ConnectAccount() {
-  const [provider, setProvider] = useState<LoginProvider>("claude");
-  const login = logins[provider];
-  const command = `go run ./cmd/server \\\n  --config ~/.config/pool/config.yaml \\\n  ${login.flag} \\\n  --no-browser`;
-  return (
-    <div
-      className={css({
-        display: "grid",
-        gridTemplateColumns: "minmax(0, 1fr)",
-        gap: "16px",
-        paddingTop: "22px",
-        borderTop: "1px solid token(colors.line)",
-      })}
-    >
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          gap: "16px",
-          flexWrap: "wrap",
-        })}
-      >
-        <h3 className={css({ fontSize: "17px", fontWeight: 600 })}>
-          Connect an account
-        </h3>
-        <Segmented
-          label="Account provider"
-          value={provider}
-          onChange={setProvider}
-          panel="connect-account"
-          options={(Object.keys(logins) as LoginProvider[]).map((value) => ({
-            value,
-            label: (
-              <>
-                <ProviderIcon provider={value} size={16} />
-                {providerName(value)}
-              </>
-            ),
-          }))}
-        />
-      </div>
-      <div
-        id="connect-account"
-        role="tabpanel"
-        aria-labelledby={"connect-account-" + provider}
-        className={css({
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr)",
-          gap: "14px",
-          minWidth: 0,
-        })}
-      >
-        <p className={caption}>
-          Add a Claude or Codex account to the shared pool. Run the command on
-          the Pool server as the service user, from the Pool source checkout.
-        </p>
-        <CodeBlock
-          label={providerName(provider) + " login command"}
-          value={command}
-        />
-        <ol
-          className={css({
-            display: "grid",
-            gap: "8px",
-            paddingLeft: "20px",
-            listStyle: "decimal",
-            color: "dim",
-            fontSize: "14px",
-            lineHeight: 1.55,
-          })}
-        >
-          {login.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <p
-          className={css({ color: "faint", fontSize: "13px", lineHeight: 1.6 })}
-        >
-          Uses the production config at ~/.config/pool/config.yaml. Adjust the
-          path if your deployment uses another config. Pool loads saved accounts
-          automatically. Refresh this page to see the account. Quota refreshes
-          every two minutes. These logins connect shared upstream accounts.
-          Members use their own Pool API tokens in clients.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function TokenLimit({ token, onSaved }: { token: Token; onSaved: () => void }) {
   const [limit, setLimit] = useState(String(token.daily_limit));
   const save = useMutation({
@@ -425,7 +316,7 @@ const rateLabels = {
 type Rate = keyof typeof rateLabels;
 
 function PriceForm({ onSaved }: { onSaved: () => void }) {
-  const [provider, setProvider] = useState<LoginProvider>("codex");
+  const [provider, setProvider] = useState<"claude" | "codex">("codex");
   const [model, setModel] = useState("");
   const [rates, setRates] = useState<Record<Rate, string>>({
     input: "",
