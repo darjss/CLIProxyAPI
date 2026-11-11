@@ -27,6 +27,7 @@ type Portal struct {
 	Dev      bool
 	Accounts func() []Account
 	Quota    *Collector
+	Logins   *AccountLogins
 	now      func() time.Time
 }
 
@@ -254,6 +255,9 @@ func (p *Portal) Register(r *gin.Engine) {
 		}
 		c.JSON(http.StatusOK, v)
 	})
+	if p.Logins != nil {
+		p.Logins.register(admin)
+	}
 	admin.POST("/quota/refresh", func(c *gin.Context) {
 		if p.Quota != nil {
 			p.Quota.Refresh()
