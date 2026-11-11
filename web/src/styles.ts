@@ -823,12 +823,8 @@ export const styles = {
     borderTop: "1px solid #27272e",
     flexWrap: "wrap",
     "& > label": {
-      flex: "1",
-      minWidth: "180px",
-    },
-    "& > label:nth-of-type(2)": {
-      flex: "0 1 150px",
-      minWidth: "100px",
+      flex: "0 1 180px",
+      minWidth: "160px",
     },
     "& > button": {
       marginBottom: "16px",
@@ -836,9 +832,6 @@ export const styles = {
     "@media (max-width: 720px)": {
       "& > label": {
         minWidth: "160px",
-      },
-      "& > label:nth-of-type(2)": {
-        minWidth: "100px",
       },
     },
   }),

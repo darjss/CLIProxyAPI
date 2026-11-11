@@ -45,8 +45,8 @@ export function TokensPage({ development }: { development: boolean }) {
         <KeyRound size={16} />
         <p>
           {development
-            ? "Local tokens work against this loopback server. Production clients will also need Cloudflare Access credentials."
-            : "Tokens authenticate the proxy. Cloudflare Access credentials are also required; an admin must bind the machine credential before unattended use."}
+            ? "Use your token as the API key against this loopback server."
+            : "Use your token as the API key in Claude, Codex, or any compatible client. Only the dashboard requires GitHub login."}
         </p>
       </div>
       {tokens.isError ? (
@@ -113,13 +113,6 @@ export function TokensPage({ development }: { development: boolean }) {
                         >
                           {status}
                         </span>
-                        {!development &&
-                          status === "Active" &&
-                          !token.service_id && (
-                            <span className={styles.cellNote}>
-                              Machine setup pending
-                            </span>
-                          )}
                       </td>
                       <td>
                         {token.daily_limit

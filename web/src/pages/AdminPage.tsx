@@ -83,9 +83,8 @@ export function AdminPage() {
         <p
           className={cx(styles.muted, styles.small, styles.sectionDescription)}
         >
-          Bind an existing Cloudflare Access client ID for machine connections.
-          Saving a binding does not create Cloudflare credentials. Limits apply
-          to new requests after recorded daily usage reaches the cap.
+          Limits apply to new requests after recorded daily usage reaches the
+          cap. Each token works directly as an API key.
         </p>
         {tokens.isError ? (
           <ErrorState error={tokens.error} />
@@ -93,7 +92,7 @@ export function AdminPage() {
           <Loading />
         ) : !tokens.data.length ? (
           <p className={cx(styles.muted, styles.small)}>
-            Create a token to configure its connection and limit.
+            Create a token to configure its daily limit.
           </p>
         ) : (
           <div className={undefined}>
@@ -191,14 +190,12 @@ function TokenSettings({
   token: Token;
   onSaved: () => void;
 }) {
-  const [serviceID, setServiceID] = useState(token.service_id);
   const [limit, setLimit] = useState(String(token.daily_limit));
   const save = useMutation({
     mutationFn: () =>
       api("/admin/tokens/" + encodeURIComponent(token.id) + "/settings", {
         method: "PUT",
         body: JSON.stringify({
-          service_id: serviceID.trim(),
           daily_limit: Number(limit),
         }),
       }),
@@ -216,15 +213,6 @@ function TokenSettings({
         <strong>{token.name}</strong>
         <code>{token.prefix}…</code>
       </div>
-      <label className={styles.field}>
-        Access client ID
-        <input
-          value={serviceID}
-          onChange={(e) => setServiceID(e.target.value)}
-          placeholder="Client ID from Cloudflare"
-          maxLength={256}
-        />
-      </label>
       <label className={styles.field}>
         Daily token cap
         <input

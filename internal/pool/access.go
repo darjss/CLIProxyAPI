@@ -52,9 +52,8 @@ func NewAccessVerifier(team, audience string, admins []string) (*AccessVerifier,
 
 type accessClaims struct {
 	jwt.RegisteredClaims
-	Email      string `json:"email"`
-	CommonName string `json:"common_name"`
-	Type       string `json:"type"`
+	Email string `json:"email"`
+	Type  string `json:"type"`
 }
 
 func (v *AccessVerifier) Verify(ctx context.Context, raw string) (Identity, error) {
@@ -68,9 +67,6 @@ func (v *AccessVerifier) Verify(ctx context.Context, raw string) (Identity, erro
 	}
 	if claims.Type != "app" {
 		return Identity{}, errors.New("Access application assertion required")
-	}
-	if claims.CommonName != "" && claims.Subject == "" {
-		return Identity{ServiceID: claims.CommonName}, nil
 	}
 	if claims.Subject == "" || claims.Email == "" {
 		return Identity{}, errors.New("Access user identity required")

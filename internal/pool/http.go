@@ -49,29 +49,33 @@ func (p *Portal) Guard() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 		c.Header("X-Content-Type-Options", "nosniff")
-		var identity Identity
 		if p.Dev {
 			remote, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 			if err != nil || !isLoopbackHost(remote) || !isLoopbackHost(c.Request.Host) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "development mode requires loopback"})
 				return
 			}
-			identity = Identity{ID: "development", Email: "Local development", Admin: true}
-		} else {
-			if p.Verifier == nil {
-				c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Access verification is not configured"})
-				return
-			}
-			var err error
-			identity, err = p.Verifier.Verify(c.Request.Context(), c.GetHeader("Cf-Access-Jwt-Assertion"))
-			if err != nil {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "valid Cloudflare Access authentication is required"})
-				return
-			}
 		}
 		path := c.Request.URL.Path
-		portalPath := path == "/" || path == "/pool" || strings.HasPrefix(path, "/pool/")
-		if portalPath {
+		if path == "/" {
+			c.Redirect(http.StatusTemporaryRedirect, "/pool/")
+			c.Abort()
+			return
+		}
+		if path == "/pool" || strings.HasPrefix(path, "/pool/") {
+			identity := Identity{ID: "development", Email: "Local development", Admin: true}
+			if !p.Dev {
+				if p.Verifier == nil {
+					c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Access verification is not configured"})
+					return
+				}
+				var err error
+				identity, err = p.Verifier.Verify(c.Request.Context(), c.GetHeader("Cf-Access-Jwt-Assertion"))
+				if err != nil {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "valid Cloudflare Access authentication is required"})
+					return
+				}
+			}
 			if identity.ID == "" {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "a human Access login is required"})
 				return
@@ -92,11 +96,6 @@ func (p *Portal) Guard() gin.HandlerFunc {
 				return
 			}
 			c.Set("pool.identity", identity)
-			if path == "/" {
-				c.Redirect(http.StatusTemporaryRedirect, "/pool/")
-				c.Abort()
-				return
-			}
 			c.Next()
 			return
 		}
@@ -108,10 +107,6 @@ func (p *Portal) Guard() gin.HandlerFunc {
 		t, err := p.Store.Authenticate(c.Request.Context(), bearer(c.Request))
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid, expired, revoked, or limited Pool token"})
-			return
-		}
-		if !p.Dev && !(identity.ID != "" && identity.ID == t.OwnerID || identity.ServiceID != "" && identity.ServiceID == t.ServiceID) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access identity does not match this Pool token"})
 			return
 		}
 		c.Set("userApiKey", t.ID)
@@ -283,17 +278,16 @@ func (p *Portal) Register(r *gin.Engine) {
 	})
 	admin.PUT("/tokens/:id/settings", func(c *gin.Context) {
 		var v struct {
-			ServiceID  string `json:"service_id"`
-			DailyLimit int64  `json:"daily_limit"`
+			DailyLimit int64 `json:"daily_limit"`
 		}
 		if !bind(c, &v) {
 			return
 		}
-		if v.DailyLimit < 0 || len(v.ServiceID) > 256 {
+		if v.DailyLimit < 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid settings"})
 			return
 		}
-		err := p.Store.ConfigureToken(c.Request.Context(), c.Param("id"), v.ServiceID, v.DailyLimit)
+		err := p.Store.ConfigureToken(c.Request.Context(), c.Param("id"), v.DailyLimit)
 		respond(c, gin.H{"saved": err == nil}, err)
 	})
 }
