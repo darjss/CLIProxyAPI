@@ -94,12 +94,60 @@ not actual subscription charges or tool/media fees.
 
 The React dashboard uses Panda CSS tokens, shared component recipes, and
 generated static utilities. `npm ci` runs Panda code generation; the generated
-`web/styled-system` directory is ignored. The dashboard includes personal activity, private request metadata, named-token
-rankings by tokens or estimated cost, account status, and price/limit controls.
-Quota collectors, pooled quota history/forecasts, dashboard OAuth management,
-per-owner aggregate limits, retention automation, Cloudflare provisioning, and
-the local client connector remain subsequent increments. The quota panels show
-that collection is not connected instead of fabricating balances.
+`web/styled-system` directory is ignored. Pages include personal activity,
+private request metadata, named-token rankings, account status, and price/limit
+controls.
+
+## Provider quota
+
+The server collects Claude and Codex OAuth quota every two minutes, even when
+the dashboard is closed. It uses the existing runtime's authenticated HTTP
+request and credential refresh methods, including per-account proxy settings.
+Only fixed provider quota endpoints are requested. Credential headers and raw
+quota responses are not persisted or returned to members.
+
+Snapshots are retained for 14 days. The quota view shows native windows,
+per-account collection status, pooled observations, next reported resets,
+1h/3h/6h burn windows, and half/same/double usage projections. Each account
+contributes 100 account-relative quota points; subscriptions are not assumed to
+have equal token capacity. Only complete observations of the current group are
+plotted. Missing or stale quota is never converted into an empty balance.
+
+Forecasts require at least two observations, pause on stale/error data, exclude
+reset intervals from burn calculations, and include only the next reported
+reset. The horizon ends before a second unreported reset (or at 72 hours).
+They are estimates, not promised capacity. New accounts start without history.
+
+Dashboard OAuth management, per-owner aggregate limits, usage retention
+automation, automated machine credential issuance, and the local client
+connector remain subsequent increments.
+
+## Persistent deployment
+
+Example user services are under `deploy/pool/`. They expect the Pool binary at
+`~/.local/share/pool/bin/pool`, built web assets at `~/.local/share/pool/web`,
+and a production proxy config at `~/.config/pool/config.yaml`. Keep the database
+and provider auth files in the persistent data directory, outside the checkout.
+Use a different production port when local development is running concurrently.
+
+`~/.config/pool/runtime.env` supplies the Access team, audience, and admin emails.
+The tunnel token belongs in `~/.config/pool/tunnel.token`, readable only by the
+service user. Use a dedicated named tunnel and enable Access assertion checks
+on its ingress rule. Do not put token contents in service command lines.
+
+The Access application should admit the intended GitHub organization and explicit
+invites through the configured GitHub provider. A Service Auth policy can admit
+service tokens tagged `app=pool`; the origin still requires the matching Pool
+token binding. The development identity is never used by the production service.
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now pool.service pool-tunnel.service
+loginctl enable-linger "$USER"
+```
+
+Enabling lingering lets user services start after boot without an interactive
+login. Existing tunnels and other Access applications do not need changes.
 
 ## Checks
 

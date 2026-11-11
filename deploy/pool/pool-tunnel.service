@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare Tunnel for Pool
+After=network.target pool.service
+Wants=pool.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared --no-autoupdate tunnel run --token-file %h/.config/pool/tunnel.token
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=default.target

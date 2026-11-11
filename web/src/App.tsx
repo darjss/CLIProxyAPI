@@ -200,7 +200,10 @@ function Workspace({ me }: { me: Me }) {
         <main className={styles.pageContent}>
           <Suspense fallback={<Loading />}>
             {page === "overview" && (
-              <OverviewPage onCreate={() => setPage("tokens")} />
+              <OverviewPage
+                onCreate={() => setPage("tokens")}
+                admin={me.identity.admin}
+              />
             )}
             {page === "tokens" && <TokensPage development={me.development} />}
             {page === "usage" && <UsagePage />}

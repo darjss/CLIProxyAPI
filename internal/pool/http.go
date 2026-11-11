@@ -26,6 +26,7 @@ type Portal struct {
 	Verifier Verifier
 	Dev      bool
 	Accounts func() []Account
+	Quota    *Collector
 	now      func() time.Time
 }
 
@@ -127,6 +128,40 @@ func (p *Portal) Register(r *gin.Engine) {
 	r.GET("/pool", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/pool/") })
 	g := r.Group("/pool/api")
 	g.GET("/me", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"identity": member(c), "development": p.Dev}) })
+	g.GET("/quota", func(c *gin.Context) {
+		hours := 3
+		switch c.DefaultQuery("hours", "3") {
+		case "1":
+			hours = 1
+		case "3":
+		case "6":
+			hours = 6
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "hours must be 1, 3, or 6"})
+			return
+		}
+		if p.Quota == nil {
+			c.JSON(http.StatusOK, gin.H{"pools": []QuotaPool{}, "accounts": []QuotaAccount{}})
+			return
+		}
+		factor := 1.0
+		switch c.DefaultQuery("scenario", "same") {
+		case "same":
+		case "half":
+			factor = 0.5
+		case "double":
+			factor = 2
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "scenario must be same, half, or double"})
+			return
+		}
+		pools, accounts, err := p.Quota.Snapshot(c.Request.Context(), hours, factor)
+		if err != nil {
+			respond(c, nil, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"pools": pools, "accounts": accounts, "observed_at": p.clock().Unix()})
+	})
 	g.GET("/tokens", func(c *gin.Context) { v, err := p.Store.Tokens(c.Request.Context(), member(c)); respond(c, v, err) })
 	g.POST("/tokens", func(c *gin.Context) {
 		var body struct {
@@ -223,6 +258,12 @@ func (p *Portal) Register(r *gin.Engine) {
 			v = p.Accounts()
 		}
 		c.JSON(http.StatusOK, v)
+	})
+	admin.POST("/quota/refresh", func(c *gin.Context) {
+		if p.Quota != nil {
+			p.Quota.Refresh()
+		}
+		c.JSON(http.StatusAccepted, gin.H{"scheduled": true})
 	})
 	admin.GET("/tokens", func(c *gin.Context) {
 		v, err := p.Store.AllTokens(c.Request.Context())
