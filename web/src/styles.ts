@@ -1,6 +1,73 @@
 import { css } from "../styled-system/css";
 
 export const styles = {
+  clientSetup: css({
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "18px",
+    minWidth: 0,
+    fontSize: "12px",
+    color: "fg.muted",
+    overflowWrap: "anywhere",
+    "& h3": { color: "fg.default", fontSize: "12px", marginBottom: "6px" },
+    "& summary": {
+      cursor: "pointer",
+      color: "fg.default",
+      outlineOffset: "4px",
+    },
+    "& details > p": { marginTop: "10px" },
+    "& a": { textDecoration: "underline", textUnderlineOffset: "3px" },
+    "& code": { overflowWrap: "anywhere" },
+  }),
+  clientModelFields: css({
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "12px",
+    marginTop: "12px",
+    "@media (max-width: 600px)": { gridTemplateColumns: "minmax(0, 1fr)" },
+  }),
+  setupTabs: css({
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: "4px",
+    padding: "4px",
+    border: "1px solid {colors.border}",
+    borderRadius: "8px",
+    background: "canvas",
+    "& button": {
+      border: 0,
+      borderRadius: "5px",
+      padding: "9px 12px",
+      background: "transparent",
+      color: "fg.muted",
+      fontSize: "12px",
+      whiteSpace: "nowrap",
+      "&[aria-selected=true]": {
+        background: "#29292f",
+        color: "fg.default",
+        boxShadow: "0 1px 3px #0004",
+      },
+      "&:hover": { color: "fg.default" },
+    },
+    "@media (max-width: 600px)": {
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    },
+  }),
+  setupPanel: css({
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr)",
+    gap: "14px",
+    outlineOffset: "4px",
+  }),
+  snippetHeading: css({
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: "12px",
+    color: "fg.default",
+  }),
+  setupSnippet: css({ maxHeight: "320px", overflow: "auto", marginTop: "8px" }),
   accountInstructions: css({
     marginTop: "20px",
     paddingTop: "16px",
