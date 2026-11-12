@@ -15,7 +15,6 @@ import {
   caption,
   card,
   formError,
-  palette,
 } from "../ui";
 
 type ConfigFile = {
@@ -49,8 +48,135 @@ const modelLabels: Record<string, string> = {
   "gpt-6-luna": "GPT-6 Luna",
 };
 
-export default function SetupPage() {
-  const [path, setPath] = useState<"use" | "share">("use");
+/** Plain-language explanation of Pool for people new to it. */
+export function PoolIntro() {
+  return (
+    <p className={cx(caption, css({ fontSize: "15px", maxWidth: "680px" }))}>
+      Pool shares a few paid Claude and ChatGPT plans with the whole team. You
+      use Claude Code or Codex as usual, and Pool runs your requests through
+      those plans. You never sign in to Claude or ChatGPT in your terminal. One
+      command connects your computer.
+    </p>
+  );
+}
+
+/**
+ * Quick Start. On first run (no tokens yet) it doubles as the welcome:
+ * same page and components, with a skip and a finish.
+ */
+export default function SetupPage({ onDone }: { onDone?: () => void }) {
+  const [share, setShare] = useState(false);
+  return (
+    <>
+      <PageHeader title={onDone ? "Welcome to Pool" : "Quick Start"}>
+        {onDone && (
+          <button className={button({ variant: "ghost" })} onClick={onDone}>
+            Skip for now
+          </button>
+        )}
+      </PageHeader>
+      <div
+        className={css({
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr)",
+          gap: "16px",
+          maxWidth: "980px",
+        })}
+      >
+        <PoolIntro />
+        <section className={card}>
+          <h2 className={css({ fontSize: "16px", fontWeight: 600, mb: "8px" })}>
+            Do you have a Claude or ChatGPT plan to share?
+          </h2>
+          <div role="radiogroup" aria-label="Share a plan">
+            <Choice
+              checked={!share}
+              onSelect={() => setShare(false)}
+              title="No, I'll just use the pool"
+              text="Set up Claude Code or Codex. About a minute."
+            />
+            <Choice
+              checked={share}
+              onSelect={() => setShare(true)}
+              title="Yes, add my plan"
+              text="Pro, Max, Plus, or Team. More plans means more room for everyone."
+              icons
+            />
+          </div>
+        </section>
+        {share && (
+          <Step number={1} title="Connect your plan">
+            <ConnectAccount />
+          </Step>
+        )}
+        <ToolSetup first={share ? 2 : 1} />
+        {onDone && (
+          <div>
+            <button className={button({ variant: "primary" })} onClick={onDone}>
+              Go to the dashboard
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function Choice({
+  checked,
+  onSelect,
+  title,
+  text,
+  icons,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  text: string;
+  icons?: boolean;
+}) {
+  return (
+    <label
+      className={css({
+        display: "grid",
+        gridTemplateColumns: "20px minmax(0, 1fr) auto",
+        alignItems: "center",
+        gap: "12px",
+        padding: "14px 4px",
+        borderTop: "1px solid token(colors.line)",
+        cursor: "pointer",
+        _first: { borderTop: 0 },
+        "&:hover strong": { color: "fg" },
+      })}
+    >
+      <input
+        type="radio"
+        name="share-plan"
+        checked={checked}
+        onChange={onSelect}
+        className={css({ accentColor: "focus", width: "16px", height: "16px" })}
+      />
+      <span className={css({ display: "grid", gap: "2px" })}>
+        <strong
+          className={css({ fontWeight: 500, fontSize: "15px" })}
+          style={{ color: checked ? undefined : "#c8c8cc" }}
+        >
+          {title}
+        </strong>
+        <span className={css({ color: "dim", fontSize: "13px" })}>{text}</span>
+      </span>
+      {icons && (
+        <span className={css({ display: "flex", gap: "8px" })}>
+          <ProviderIcon provider="claude" size={18} />
+          <ProviderIcon provider="codex" size={18} />
+        </span>
+      )}
+    </label>
+  );
+}
+
+/** Pick a tool, run one command, and watch for the first request. */
+export function ToolSetup({ first = 1 }: { first?: number }) {
   const [tool, setTool] = useState<HarnessID>("claude");
   const harnesses = useQuery({
     queryKey: ["harnesses"],
@@ -58,7 +184,6 @@ export default function SetupPage() {
       api<Record<HarnessID, Harness>>("/setup/harnesses", { signal }),
     staleTime: Infinity,
   });
-
   if (harnesses.isError)
     return (
       <ErrorState
@@ -69,69 +194,44 @@ export default function SetupPage() {
   if (harnesses.isPending) return <Loading />;
   const harness = harnesses.data[tool];
   const model = harness.models[0];
-
   return (
     <>
-      <PageHeader title="Quick Start">
-        <Segmented
-          label="What do you want to do"
-          value={path}
-          onChange={setPath}
-          options={[
-            { value: "use", label: "Use the pool" },
-            { value: "share", label: "Share an account" },
-          ]}
-        />
-      </PageHeader>
-      <div
-        className={css({
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr)",
-          gap: "16px",
-          maxWidth: "980px",
-        })}
-      >
-        {path === "share" && (
-          <Step number={0} title="Connect your Claude or Codex account">
-            <p className={caption}>
-              The pool uses it for everyone. You sign in on the provider's page,
-              and the credentials stay on the server.
-            </p>
-            <ConnectAccount />
-          </Step>
-        )}
-        <Step number={1} title="Pick your tool">
-          <div
-            className={css({ display: "flex", gap: "12px", flexWrap: "wrap" })}
-          >
-            <Segmented
-              label="Coding tool"
-              value={tool}
-              onChange={setTool}
-              options={harnessOrder.map((id) => ({
-                value: id,
-                label: (
-                  <>
-                    <ProviderIcon provider={id} size={16} />
-                    {harnesses.data[id].label}
-                  </>
-                ),
-              }))}
-            />
-          </div>
-          <p className={caption}>
-            Uses <code>{modelLabels[model] ?? model}</code> by default. Switch
-            models any time inside {harness.label}.
-          </p>
-        </Step>
-        <Install
-          key={tool + model}
-          tool={tool}
-          model={model}
-          harness={harness}
-        />
-        <OtherWays harness={harness} model={model} />
-      </div>
+      <Step number={first} title="Pick your tool">
+        <p className={caption}>
+          Both are coding assistants that run in your terminal. Pick the one you
+          use. Not sure? Pick Claude Code.
+        </p>
+        <div
+          className={css({ display: "flex", gap: "12px", flexWrap: "wrap" })}
+        >
+          <Segmented
+            label="Coding tool"
+            value={tool}
+            onChange={setTool}
+            options={harnessOrder.map((id) => ({
+              value: id,
+              label: (
+                <>
+                  <ProviderIcon provider={id} size={16} />
+                  {harnesses.data[id].label}
+                </>
+              ),
+            }))}
+          />
+        </div>
+        <p className={caption}>
+          It starts on <code>{modelLabels[model] ?? model}</code>. You can
+          switch models inside {harness.label} any time.
+        </p>
+      </Step>
+      <Install
+        key={tool + model}
+        tool={tool}
+        model={model}
+        harness={harness}
+        first={first + 1}
+      />
+      <OtherWays harness={harness} model={model} />
     </>
   );
 }
@@ -140,10 +240,12 @@ function Install({
   tool,
   model,
   harness,
+  first,
 }: {
   tool: HarnessID;
   model: string;
   harness: Harness;
+  first: number;
 }) {
   const create = useMutation({
     mutationFn: () =>
@@ -166,14 +268,17 @@ function Install({
 
   return (
     <>
-      <Step number={2} title="Run this on your computer">
+      <Step number={first} title="Run this on your computer">
+        <p className={caption}>
+          Open a terminal (Terminal on a Mac), paste the command, and press
+          Enter. It points {harness.label} at Pool and gives it your own key.
+        </p>
         {create.data ? (
           <>
             <CodeBlock label="Setup command" value={create.data.command} />
             <p className={caption}>
-              Works once, for 10 minutes, in bash, zsh, or fish. It saves a new
-              token to <code>~/.config/pool/token</code> and backs up any config
-              it changes. Needs Python 3.
+              Works once, within 10 minutes. It keeps a backup of any settings
+              it changes. Needs Python 3, which Macs and Linux usually have.
             </p>
           </>
         ) : (
@@ -205,7 +310,7 @@ function Install({
           </div>
         </details>
       </Step>
-      <Step number={3} title="Send your first message">
+      <Step number={first + 1} title="Send your first message">
         <Progress
           done={state?.status === "installed"}
           active={!!code && state?.status !== "expired"}
@@ -356,8 +461,6 @@ function OtherWays({ harness, model }: { harness: Harness; model: string }) {
   );
 }
 
-const stepColors = [palette.claude, palette.blue, palette.violet, palette.ok];
-
 function Step({
   number,
   title,
@@ -389,13 +492,11 @@ function Step({
           borderRadius: "9px",
           fontWeight: 700,
           fontVariantNumeric: "tabular-nums",
+          color: "focus",
+          background: "rgba(138,164,255,0.14)",
         })}
-        style={{
-          color: stepColors[number],
-          background: `color-mix(in srgb, ${stepColors[number]} 16%, transparent)`,
-        }}
       >
-        {number || "+"}
+        {number}
       </span>
       <div
         className={css({

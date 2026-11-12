@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { css, cx } from "../styled-system/css";
 import { button, iconButton } from "../styled-system/recipes";
+import { BrandMark } from "./brand";
 
 export function PageHeader({
   title,
@@ -629,53 +630,8 @@ export function ProviderIcon({
   provider: string;
   size?: number;
 }) {
-  if (provider === "claude")
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-        <g stroke="#e8835f" strokeWidth="2.3" strokeLinecap="round">
-          {Array.from({ length: 12 }, (_, i) => {
-            const a = (i * Math.PI) / 6;
-            const r = i % 2 ? 8.6 : 10.4;
-            return (
-              <line
-                key={i}
-                x1={12 + Math.cos(a) * 2.2}
-                y1={12 + Math.sin(a) * 2.2}
-                x2={12 + Math.cos(a) * r}
-                y2={12 + Math.sin(a) * r}
-              />
-            );
-          })}
-        </g>
-      </svg>
-    );
-  if (provider === "codex")
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-        <defs>
-          <linearGradient id="codex-mark" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#9db7ff" />
-            <stop offset="1" stopColor="#5a6ff0" />
-          </linearGradient>
-        </defs>
-        <rect
-          x="1.5"
-          y="1.5"
-          width="21"
-          height="21"
-          rx="6"
-          fill="url(#codex-mark)"
-        />
-        <path
-          d="M8 9.5 10.5 12 8 14.5M12.5 15h4"
-          stroke="#fff"
-          strokeWidth="1.9"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
+  if (provider === "claude" || provider === "codex")
+    return <BrandMark provider={provider} size={size} />;
   return (
     <span
       aria-hidden="true"

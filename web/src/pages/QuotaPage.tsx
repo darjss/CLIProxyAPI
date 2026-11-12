@@ -1,7 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Command,
@@ -47,11 +46,9 @@ import { QuotaChart, type View } from "./QuotaChart";
 
 type Provider = "all" | "claude" | "codex";
 type Hours = "1" | "3" | "6";
-type Scenario = "same" | "half" | "double";
 
 const providers = ["claude", "codex"] as const;
 const colors = { claude: "#e8835f", codex: "#7d9ef5" };
-const factors: Record<Scenario, number> = { same: 1, half: 0.5, double: 2 };
 const day = 86400;
 const viewDays = 7;
 const shiftDays = 3;
@@ -60,13 +57,12 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
   const [provider, setProvider] = useState<Provider>("all");
   const [view, setView] = useState<View>("remaining");
   const [hours, setHours] = useState<Hours>("3");
-  const [scenario, setScenario] = useState<Scenario>("same");
   const [connecting, setConnecting] = useState(false);
   const [shift, setShift] = useState(0);
   const quota = useQuery({
-    queryKey: ["quota", hours, scenario],
+    queryKey: ["quota", hours],
     queryFn: ({ signal }) =>
-      api<QuotaSnapshot>(`/quota?hours=${hours}&scenario=${scenario}`, {
+      api<QuotaSnapshot>(`/quota?hours=${hours}`, {
         signal,
       }),
     refetchInterval: 60_000,
@@ -133,10 +129,17 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
 
       {
         <>
-          <div className={css({ marginBottom: "14px" })}>
+          <div
+            className={css({
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "10px",
+              marginBottom: "20px",
+            })}
+          >
             <Segmented
               label="Provider"
-              plain
               value={provider}
               onChange={setProvider}
               options={[
@@ -162,17 +165,6 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
                 })),
               ]}
             />
-          </div>
-
-          <div
-            className={css({
-              display: "flex",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "12px",
-              marginBottom: "22px",
-            })}
-          >
             <Segmented
               label="Chart"
               value={view}
@@ -182,7 +174,7 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
                 { value: "drain", label: "Drain rate" },
               ]}
             />
-            <Control label="Burn rate">
+            <span title="How far back the burn rate and forecast look">
               <Segmented
                 label="Burn rate window"
                 value={hours}
@@ -193,59 +185,17 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
                   { value: "6", label: "6h" },
                 ]}
               />
-            </Control>
-            <Control label="Future usage">
-              <div className={css({ position: "relative" })}>
-                <select
-                  aria-label="Future usage"
-                  value={scenario}
-                  onChange={(event) =>
-                    setScenario(event.target.value as Scenario)
-                  }
-                  className={css({
-                    appearance: "none",
-                    height: "42px",
-                    paddingInline: "14px 40px",
-                    borderRadius: "12px",
-                    background: "card",
-                    color: "fg",
-                    fontSize: "15px",
-                    fontWeight: 500,
-                    _hover: { background: "raised" },
-                    "& option": { background: "#18181a" },
-                  })}
-                >
-                  <option value="same">Same as now</option>
-                  <option value="half">Half as much</option>
-                  <option value="double">Twice as much</option>
-                </select>
-                <ChevronDown
-                  size={16}
-                  className={css({
-                    position: "absolute",
-                    right: "14px",
-                    top: "13px",
-                    pointerEvents: "none",
-                    color: "dim",
-                  })}
-                />
-              </div>
-            </Control>
+            </span>
             <div
+              title={`${shortDate(domain[0])} to ${shortDate(domain[1] - 1)}`}
               className={css({
                 display: "flex",
                 alignItems: "center",
-                gap: "6px",
+                gap: "4px",
                 marginLeft: "auto",
                 color: "dim",
-                fontSize: "15px",
               })}
             >
-              <span
-                className={css({ marginRight: "6px", whiteSpace: "nowrap" })}
-              >
-                {shortDate(domain[0])} to {shortDate(domain[1] - 1)}
-              </span>
               <button
                 className={iconButton()}
                 aria-label="Earlier"
@@ -303,7 +253,7 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
                     now={now}
                     domain={domain}
                     hours={Number(hours)}
-                    factor={factors[scenario]}
+                    factor={1}
                     admin={admin}
                   />
                 ))}
@@ -312,24 +262,6 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
         </>
       }
     </>
-  );
-}
-
-function Control({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className={css({ display: "flex", alignItems: "center", gap: "4px" })}>
-      <span
-        className={css({
-          color: "dim",
-          fontSize: "15px",
-          paddingInline: "8px",
-          whiteSpace: "nowrap",
-        })}
-      >
-        {label}
-      </span>
-      {children}
-    </div>
   );
 }
 
