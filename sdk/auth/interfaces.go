@@ -19,6 +19,7 @@ type LoginOptions struct {
 	CallbackPort int
 	Metadata     map[string]string
 	Prompt       func(prompt string) (string, error)
+	ProxyURL     string
 	// CallbackURL completes Claude login without opening a local callback listener.
 	CallbackURL func(ctx context.Context, authURL string) (string, error)
 	// DeviceCode displays Codex device approval details in an embedding application.
