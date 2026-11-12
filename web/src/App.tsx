@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { css, cx } from "../styled-system/css";
 import { iconButton } from "../styled-system/recipes";
-import { queries, type Me } from "./api";
+import { queries, useTokens, type Me } from "./api";
 import { ErrorState, Loading, Person } from "./ui";
 
 const QuotaPage = lazy(() => import("./pages/QuotaPage"));
@@ -158,6 +158,28 @@ function Shell({ me }: { me: Me }) {
   const fetching = useIsFetching();
   const [collapsed, setCollapsed] = useState(false);
   const admin = me.identity.admin;
+  const tokens = useTokens();
+
+  // Ctrl+B (Cmd+B on macOS) toggles the sidebar, except while typing.
+  useEffect(() => {
+    const toggle = (event: KeyboardEvent) => {
+      const typing =
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, select, [contenteditable]");
+      if ((event.ctrlKey || event.metaKey) && event.key === "b" && !typing) {
+        event.preventDefault();
+        setCollapsed((value) => !value);
+      }
+    };
+    window.addEventListener("keydown", toggle);
+    return () => window.removeEventListener("keydown", toggle);
+  }, []);
+
+  // Someone with no tokens yet starts on Quick Start instead of Accounts.
+  useEffect(() => {
+    if (!window.location.hash && tokens.data?.length === 0)
+      window.location.hash = "#/setup";
+  }, [tokens.data]);
 
   return (
     <div
@@ -287,6 +309,7 @@ function Shell({ me }: { me: Me }) {
         </div>
         <button
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={(collapsed ? "Expand" : "Collapse") + " sidebar (Ctrl+B)"}
           onClick={() => setCollapsed((value) => !value)}
           className={css({
             position: "absolute",

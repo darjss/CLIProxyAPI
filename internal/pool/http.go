@@ -15,13 +15,14 @@ import (
 )
 
 type Account struct {
-	ID       string   `json:"id"`
-	Provider string   `json:"provider"`
-	Status   string   `json:"status"`
-	Disabled bool     `json:"disabled"`
-	Email    string   `json:"email"`
-	Message  string   `json:"message"`
-	Models   []string `json:"models"`
+	ID       string `json:"id"`
+	Provider string `json:"provider"`
+	Status   string `json:"status"`
+	Disabled bool   `json:"disabled"`
+	Email    string `json:"email"`
+	Message  string `json:"message"`
+	// CooldownUntil is when Pool retries an account it blocked after an upstream error.
+	CooldownUntil int64 `json:"cooldown_until"`
 }
 
 // Portal owns routes independently of the privileged management API.
@@ -32,11 +33,13 @@ type Portal struct {
 	Accounts func() []Account
 	// SetDisabled takes an account out of routing, or back in, keeping its credentials.
 	SetDisabled func(ctx context.Context, id string, disabled bool) error
-	Quota       *Collector
-	Logins      *AccountLogins
-	GitHub      *GitHub
-	Setups      *Setups
-	now         func() time.Time
+	// ResetCooldown clears Pool's local retry block on an account; provider quota is unchanged.
+	ResetCooldown func(ctx context.Context, id string) error
+	Quota         *Collector
+	Logins        *AccountLogins
+	GitHub        *GitHub
+	Setups        *Setups
+	now           func() time.Time
 }
 
 // withProfile attaches the cached GitHub profile, looking it up at most hourly until found.
@@ -233,7 +236,7 @@ func (p *Portal) Register(r *gin.Engine) {
 		for i := range accounts {
 			a := info[accounts[i].ID]
 			accounts[i].Email, accounts[i].Disabled, accounts[i].Day = a.Email, a.Disabled, activity[a.ID]
-			accounts[i].AuthStatus, accounts[i].Message = a.Status, a.Message
+			accounts[i].AuthStatus, accounts[i].Message, accounts[i].CooldownUntil = a.Status, a.Message, a.CooldownUntil
 			delete(info, accounts[i].ID)
 		}
 		// The collector skips disabled accounts; list them so they can be enabled again.
@@ -317,67 +320,33 @@ func (p *Portal) Register(r *gin.Engine) {
 		}
 		c.Next()
 	})
-	// Models the pool can serve now, with the accounts behind each and its API rate.
-	g.GET("/models", func(c *gin.Context) {
-		prices, err := p.Store.LatestPrices(c.Request.Context())
-		if err != nil {
-			respond(c, nil, err)
-			return
-		}
-		type model struct {
-			ID       string   `json:"id"`
-			Provider string   `json:"provider"`
-			Accounts []string `json:"accounts"`
-			Price    *Price   `json:"price"`
-		}
-		byID := map[string]*model{}
-		out := []*model{}
-		if p.Accounts != nil {
-			for _, a := range p.Accounts() {
-				if a.Disabled {
-					continue
-				}
-				for _, id := range a.Models {
-					m := byID[a.Provider+"/"+id]
-					if m == nil {
-						m = &model{ID: id, Provider: a.Provider}
-						if price, ok := prices[a.Provider+"/"+id]; ok {
-							m.Price = &price
-						}
-						byID[a.Provider+"/"+id] = m
-						out = append(out, m)
-					}
-					m.Accounts = append(m.Accounts, a.Email)
-				}
-			}
-		}
-		c.JSON(http.StatusOK, out)
-	})
-	admin.PUT("/accounts/:id", func(c *gin.Context) {
-		var body struct {
-			Disabled bool `json:"disabled"`
-		}
-		if !bind(c, &body) {
-			return
-		}
-		if p.SetDisabled == nil {
+	// disable, enable, or reset (clear Pool's cooldown after an upstream 429).
+	admin.POST("/accounts/:id/:action", func(c *gin.Context) {
+		if p.SetDisabled == nil || p.ResetCooldown == nil || p.Accounts == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "accounts are not loaded"})
 			return
 		}
 		// The dashboard only sees hashed quota IDs, never auth file names.
 		id := ""
-		if p.Accounts != nil {
-			for _, a := range p.Accounts() {
-				if quotaID(a.ID) == c.Param("id") {
-					id = a.ID
-				}
+		for _, a := range p.Accounts() {
+			if quotaID(a.ID) == c.Param("id") {
+				id = a.ID
 			}
 		}
 		if id == "" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		err := p.SetDisabled(c.Request.Context(), id, body.Disabled)
+		var err error
+		switch c.Param("action") {
+		case "disable", "enable":
+			err = p.SetDisabled(c.Request.Context(), id, c.Param("action") == "disable")
+		case "reset":
+			err = p.ResetCooldown(c.Request.Context(), id)
+		default:
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
 		respond(c, gin.H{"saved": err == nil}, err)
 	})
 	admin.GET("/members", func(c *gin.Context) {

@@ -11,17 +11,6 @@ export type Me = {
   limit?: { tier: Tier; day?: number; week?: number };
 };
 export type Member = Person & { id: string; tier: Tier; tokens: number };
-export type PoolModel = {
-  id: string;
-  provider: string;
-  accounts: string[];
-  price: {
-    input: number;
-    output: number;
-    cache_read: number;
-    cache_write: number;
-  } | null;
-};
 export type Token = {
   id: string;
   name: string;
@@ -64,6 +53,15 @@ export type Usage = {
   };
   savings_micros: number;
   clients: ClientUsage[];
+  models: {
+    provider: string;
+    model: string;
+    requests: number;
+    tokens: number;
+    input: number;
+    cached: number;
+    cost_micros: number;
+  }[];
   days: { date: string; client: string; tokens: number; cost_micros: number }[];
 };
 export type Leader = Aggregate &
@@ -100,6 +98,7 @@ export type QuotaAccount = {
   disabled: boolean;
   auth_status: string;
   message: string;
+  cooldown_until: number;
   day: { requests: number; cost_micros: number; last_used: number };
 };
 export type QuotaPool = {

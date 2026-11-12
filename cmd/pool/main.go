@@ -19,7 +19,6 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pool"
-	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	_ "github.com/router-for-me/CLIProxyAPI/v8/internal/translator"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
@@ -124,13 +123,17 @@ func run() error {
 					if email == "" {
 						email = a.Attributes["email"]
 					}
-					var models []string
-					for _, m := range registry.GetGlobalRegistry().GetModelsForClient(a.ID) {
-						models = append(models, m.ID)
+					var cooldown int64
+					if a.Unavailable && a.NextRetryAfter.After(time.Now()) {
+						cooldown = a.NextRetryAfter.Unix()
 					}
-					out = append(out, pool.Account{ID: a.ID, Provider: a.Provider, Status: string(a.Status), Disabled: a.Disabled, Email: email, Message: a.StatusMessage, Models: models})
+					out = append(out, pool.Account{ID: a.ID, Provider: a.Provider, Status: string(a.Status), Disabled: a.Disabled, Email: email, Message: a.StatusMessage, CooldownUntil: cooldown})
 				}
 				return out
+			}
+			portal.ResetCooldown = func(ctx context.Context, id string) error {
+				_, _, err := base.AuthManager.ResetQuota(ctx, id)
+				return err
 			}
 			// Same state change as the management API's auth-file status toggle.
 			portal.SetDisabled = func(ctx context.Context, id string, disabled bool) error {

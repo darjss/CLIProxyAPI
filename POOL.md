@@ -163,11 +163,21 @@ They are estimates, not promised capacity. New accounts start without history.
 
 The **Accounts** page shows each account's email, a state such as "7-day limit
 used · back in 3d" or "Sign-in expired", its requests and cost in the last 24
-hours, and the quota windows. Admins can disable an account to take it out of
-routing without deleting its credentials. The state persists in the auth file,
-and a disabled account stays listed so it can be enabled again. The Models tab
-lists every model the enabled accounts serve, with the accounts behind it and
-its models.dev rate. Each event records the upstream account that served it.
+hours, and the quota windows. Each event records the upstream account that
+served it. Admins use the account's ⋯ menu for two actions:
+
+- **Disable / Enable.** Disabling takes the account out of routing and keeps its
+  credentials. The state persists in the auth file, and a disabled account stays
+  listed so it can be enabled again.
+- **Retry now.** After an upstream 429 or error, CLIProxyAPI pauses the account
+  until a retry time, shown as "Paused · retrying in 12m". Retry now calls the
+  auth manager's `ResetQuota`, the same reset as upstream's
+  `POST /v8/management/routing/cooldown/reset`, so routing tries the account
+  again right away. It does not restore provider quota. An account whose
+  7-day window is used up stays limited until the provider resets it.
+
+The sidebar collapses with Ctrl+B, or Cmd+B on macOS. Someone with no tokens
+lands on Quick Start.
 
 Usage retention automation remains a subsequent increment.
 
