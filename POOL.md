@@ -106,17 +106,24 @@ Execution IDs deduplicate repeated deliveries. Retries remain distinct upstream
 executions. Cache and reasoning subtotals are not added to their parent totals.
 Daily caps use UTC and completed usage; in-flight requests can overshoot.
 
-Admins supply exact model rates in USD per million tokens. Estimates use uncached
-input, cache reads, cache writes, and output. The applied price version is saved
-with the event; editing prices does not rewrite history. Unclassified usage or
-missing rates remain unpriced. Costs are token-only API-equivalent estimates,
-not actual subscription charges or tool/media fees.
+Pool loads public API rates from `https://models.dev/api.json` at startup and
+then daily. Claude models use the `anthropic` rates and Codex models use the
+`openai` rates, in USD per million tokens. Estimates use uncached input, cache
+reads, cache writes, and output. The applied price version is saved with the
+event, and a changed rate adds a new version without rewriting history. Complete
+events that had no rate get priced when one first appears. Unclassified usage
+stays unpriced. Costs are token-only API-equivalent estimates, not actual
+subscription charges or tool/media fees.
+
+Each request is tagged with its coding tool from the User-Agent: `claude-cli/`
+is Claude Code, `codex…` is Codex, and anything else is Other. Usage and the
+leaderboard split cost and tokens by tool. Anyone signed in can open a person's
+daily history from the leaderboard. Individual requests stay private to their
+owner.
 
 The React dashboard uses Panda CSS tokens, shared component recipes, and
 generated static utilities. `npm ci` runs Panda code generation; the generated
-`web/styled-system` directory is ignored. Pages include personal activity,
-private request metadata, named-token rankings, account status, and price/limit
-controls.
+`web/styled-system` directory is ignored.
 
 ## Provider quota
 

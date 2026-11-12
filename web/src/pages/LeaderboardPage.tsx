@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { css, cx } from "../../styled-system/css";
 import {
-  dollars,
   number,
   periodOptions,
   queries,
+  type Leader,
   type Metric,
   type Period,
 } from "../api";
+import { UsageView, amount, clients } from "../UsageView";
+import { metricOptions } from "./UsagePage";
 import {
   EmptyState,
   ErrorState,
@@ -29,11 +32,12 @@ const percent = new Intl.NumberFormat("en", {
 });
 
 export default function LeaderboardPage() {
-  const [period, setPeriod] = useState<Period>("week");
-  const [metric, setMetric] = useState<Metric>("tokens");
+  const [period, setPeriod] = useState<Period>("7d");
+  const [metric, setMetric] = useState<Metric>("cost");
+  const [open, setOpen] = useState<string | null>(null);
   const leaders = useQuery(queries.leaders(period, metric));
-  const top = leaders.data?.[0];
-  const max = top ? (metric === "tokens" ? top.tokens : top.cost_micros) : 0;
+  const value = (l: Leader) => (metric === "cost" ? l.cost_micros : l.tokens);
+  const max = leaders.data?.[0] ? value(leaders.data[0]) : 0;
 
   return (
     <>
@@ -42,10 +46,7 @@ export default function LeaderboardPage() {
           label="Rank by"
           value={metric}
           onChange={setMetric}
-          options={[
-            { value: "tokens", label: "Tokens" },
-            { value: "cost", label: "Cost" },
-          ]}
+          options={metricOptions}
         />
         <Segmented
           label="Leaderboard period"
@@ -75,99 +76,156 @@ export default function LeaderboardPage() {
               <tr>
                 <th>#</th>
                 <th>Person</th>
-                <th className={css({ width: "32%" })}>
-                  {metric === "tokens" ? "Tokens" : "Est. cost"}
+                <th className={css({ width: "30%" })}>
+                  {metric === "cost" ? "Est. cost" : "Tokens"}
                 </th>
-                <th>Input / output</th>
+                <th>Tools</th>
                 <th>Cache hit</th>
-                <th>{metric === "tokens" ? "Est. cost" : "Tokens"}</th>
+                <th>{metric === "cost" ? "Tokens" : "Est. cost"}</th>
               </tr>
             </thead>
             <tbody>
               {leaders.data.map((leader, index) => {
-                const value =
-                  metric === "tokens" ? leader.tokens : leader.cost_micros;
+                const expanded = open === leader.id;
                 return (
-                  <tr key={leader.id}>
-                    <td>
-                      <span
+                  <Fragment key={leader.id}>
+                    <tr
+                      onClick={() => setOpen(expanded ? null : leader.id)}
+                      aria-expanded={expanded}
+                      className={css({
+                        cursor: "pointer",
+                        _hover: { "& td": { background: "raised" } },
+                      })}
+                    >
+                      <td
                         className={css({
                           fontFamily: "mono",
-                          fontSize: "14px",
-                        })}
-                        style={{ color: index < 3 ? "#e8c37a" : "#68686e" }}
-                      >
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                    </td>
-                    <td className={primaryCell}>
-                      <Person person={leader} />
-                      <span className={note}>
-                        {number.format(leader.requests)} requests ·{" "}
-                        {leader.keys} {leader.keys === 1 ? "token" : "tokens"}
-                      </span>
-                    </td>
-                    <td>
-                      <div
-                        className={css({
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "14px",
+                          color: index < 3 ? "warn" : "faint",
                         })}
                       >
-                        <strong
+                        {index + 1}
+                      </td>
+                      <td className={primaryCell}>
+                        <span
                           className={css({
-                            color: "fg",
-                            fontWeight: 600,
-                            minWidth: "64px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
                           })}
                         >
-                          {metric === "tokens"
-                            ? number.format(leader.tokens)
-                            : leader.priced
-                              ? dollars(leader.cost_micros)
-                              : "—"}
-                        </strong>
+                          {expanded ? (
+                            <ChevronDown size={14} />
+                          ) : (
+                            <ChevronRight size={14} />
+                          )}
+                          <Person person={leader} />
+                        </span>
+                        <span className={note}>
+                          {number.format(leader.requests)} requests ·{" "}
+                          {leader.keys} {leader.keys === 1 ? "token" : "tokens"}
+                        </span>
+                      </td>
+                      <td>
                         <div
                           className={css({
-                            flex: 1,
-                            minWidth: "80px",
-                            height: "4px",
-                            borderRadius: "full",
-                            background: "active",
-                            overflow: "hidden",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "14px",
                           })}
                         >
+                          <strong
+                            className={css({
+                              fontWeight: 600,
+                              minWidth: "72px",
+                              fontVariantNumeric: "tabular-nums",
+                            })}
+                          >
+                            {amount(metric, value(leader))}
+                          </strong>
                           <div
                             className={css({
-                              height: "100%",
+                              flex: 1,
+                              minWidth: "80px",
+                              height: "4px",
                               borderRadius: "full",
-                              background: "#b9c3ff",
+                              background: "active",
+                              overflow: "hidden",
                             })}
-                            style={{
-                              width: max ? (value / max) * 100 + "%" : 0,
-                            }}
-                          />
+                          >
+                            <div
+                              className={css({
+                                height: "100%",
+                                borderRadius: "full",
+                                background: "#b9c3ff",
+                              })}
+                              style={{
+                                width: max
+                                  ? (value(leader) / max) * 100 + "%"
+                                  : 0,
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      {number.format(leader.input)} /{" "}
-                      {number.format(leader.output)}
-                    </td>
-                    <td>
-                      {leader.input
-                        ? percent.format(leader.cached / leader.input)
-                        : "—"}
-                    </td>
-                    <td>
-                      {metric === "tokens"
-                        ? leader.priced
-                          ? dollars(leader.cost_micros)
-                          : "—"
-                        : number.format(leader.tokens)}
-                    </td>
-                  </tr>
+                      </td>
+                      <td>
+                        <div
+                          title={leader.clients
+                            .map(
+                              (c) =>
+                                `${(clients[c.client] ?? clients.other).label} ${number.format(c.tokens)}`,
+                            )
+                            .join(" · ")}
+                          className={css({
+                            display: "flex",
+                            gap: "2px",
+                            width: "96px",
+                            height: "6px",
+                          })}
+                        >
+                          {leader.clients.map((c) => (
+                            <span
+                              key={c.client}
+                              className={css({ borderRadius: "full" })}
+                              style={{
+                                flex: c.tokens || 1,
+                                background: (clients[c.client] ?? clients.other)
+                                  .color,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        {leader.input
+                          ? percent.format(leader.cached / leader.input)
+                          : "—"}
+                      </td>
+                      <td>
+                        {amount(
+                          metric === "cost" ? "tokens" : "cost",
+                          metric === "cost"
+                            ? leader.tokens
+                            : leader.cost_micros,
+                        )}
+                      </td>
+                    </tr>
+                    {expanded && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className={css({
+                            padding: "24px 8px 32px !important",
+                          })}
+                        >
+                          <UsageView
+                            period={period}
+                            metric={metric}
+                            owner={leader.id}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

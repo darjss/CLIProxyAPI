@@ -151,6 +151,7 @@ func (p *Portal) Guard() gin.HandlerFunc {
 		ctx := usage.WithCapturedIdentity(c.Request.Context(), t.ID, ProviderID, false)
 		ctx = usage.WithAPIKey(ctx, t.ID)
 		ctx = usage.WithAccessProvider(ctx, ProviderID)
+		ctx = WithClient(ctx, c.GetHeader("User-Agent"))
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
@@ -228,32 +229,14 @@ func (p *Portal) Register(r *gin.Engine) {
 		err := p.Store.Rename(c.Request.Context(), member(c), c.Param("id"), body.Name)
 		respond(c, gin.H{"saved": err == nil}, err)
 	})
-	g.GET("/overview", func(c *gin.Context) {
+	// Aggregates are shared with the team, like the leaderboard; individual requests stay private.
+	g.GET("/usage", func(c *gin.Context) {
 		since, ok := p.since(c)
 		if !ok {
 			return
 		}
-		a, err := p.Store.Summary(c.Request.Context(), member(c).ID, since)
-		if err != nil {
-			respond(c, nil, err)
-			return
-		}
-		counts := map[string]int{"claude": 0, "codex": 0}
-		if p.Accounts != nil {
-			for _, a := range p.Accounts() {
-				if !a.Disabled {
-					counts[a.Provider]++
-				}
-			}
-		}
-		c.JSON(http.StatusOK, gin.H{"usage": a, "accounts": counts, "quota_status": "not_connected", "since": since})
-	})
-	g.GET("/activity", func(c *gin.Context) {
-		since, ok := p.since(c)
-		if !ok {
-			return
-		}
-		v, err := p.Store.Activity(c.Request.Context(), member(c).ID, since)
+		owner := c.DefaultQuery("owner", member(c).ID)
+		v, err := p.Store.Usage(c.Request.Context(), owner, since)
 		respond(c, v, err)
 	})
 	g.GET("/requests", func(c *gin.Context) {
@@ -308,18 +291,6 @@ func (p *Portal) Register(r *gin.Engine) {
 		v, err := p.Store.AllTokens(c.Request.Context())
 		respond(c, v, err)
 	})
-	admin.GET("/prices", func(c *gin.Context) { v, err := p.Store.Prices(c.Request.Context()); respond(c, v, err) })
-	admin.POST("/prices", func(c *gin.Context) {
-		var v Price
-		if !bind(c, &v) {
-			return
-		}
-		if err := p.Store.AddPrice(c.Request.Context(), v); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid price or price could not be saved"})
-			return
-		}
-		c.JSON(http.StatusCreated, gin.H{"saved": true})
-	})
 	admin.PUT("/tokens/:id/settings", func(c *gin.Context) {
 		var v struct {
 			DailyLimit int64 `json:"daily_limit"`
@@ -358,20 +329,10 @@ func respond(c *gin.Context, v any, err error) {
 	c.JSON(http.StatusOK, v)
 }
 func (p *Portal) since(c *gin.Context) (int64, bool) {
-	now := p.clock().UTC()
-	var start time.Time
-	switch c.DefaultQuery("period", "week") {
-	case "today":
-		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	case "week":
-		start = now.AddDate(0, 0, -7)
-	case "month":
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	case "all":
-		start = time.Unix(0, 0)
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "period must be today, week, month, or all"})
+	days, ok := map[string]int{"24h": 1, "7d": 7, "30d": 30, "90d": 90}[c.DefaultQuery("period", "7d")]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "period must be 24h, 7d, 30d, or 90d"})
 		return 0, false
 	}
-	return start.Unix(), true
+	return p.clock().AddDate(0, 0, -days).Unix(), true
 }

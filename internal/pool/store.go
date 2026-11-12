@@ -76,6 +76,7 @@ type Leader struct {
 	Avatar string `json:"avatar"`
 	Keys   int64  `json:"keys"`
 	Aggregate
+	Clients []ClientUsage `json:"clients"`
 }
 
 type Event struct {
@@ -88,12 +89,43 @@ type Event struct {
 	Failed     bool   `json:"failed"`
 	Tokens     int64  `json:"tokens"`
 	CostMicros *int64 `json:"cost_micros"`
+	Client     string `json:"client"`
 }
 
-type Day struct {
-	Date     string `json:"date"`
-	Tokens   int64  `json:"tokens"`
-	Requests int64  `json:"requests"`
+type ClientUsage struct {
+	Client     string `json:"client"`
+	Requests   int64  `json:"requests"`
+	Tokens     int64  `json:"tokens"`
+	CostMicros int64  `json:"cost_micros"`
+}
+
+type DayUsage struct {
+	Date       string `json:"date"`
+	Client     string `json:"client"`
+	Tokens     int64  `json:"tokens"`
+	CostMicros int64  `json:"cost_micros"`
+}
+
+// Usage splits input into uncached, cache-read, and cache-write tokens; they add up to input.
+type Usage struct {
+	Requests   int64 `json:"requests"`
+	Tokens     int64 `json:"tokens"`
+	Uncached   int64 `json:"uncached"`
+	CacheRead  int64 `json:"cache_read"`
+	CacheWrite int64 `json:"cache_write"`
+	Output     int64 `json:"output"`
+	Priced     int64 `json:"priced"`
+	CostMicros int64 `json:"cost_micros"`
+	Cost       struct {
+		Uncached   int64 `json:"uncached"`
+		CacheRead  int64 `json:"cache_read"`
+		CacheWrite int64 `json:"cache_write"`
+		Output     int64 `json:"output"`
+	} `json:"cost"`
+	// SavingsMicros is what cache reads would have cost at the uncached input rate.
+	SavingsMicros int64         `json:"savings_micros"`
+	Clients       []ClientUsage `json:"clients"`
+	Days          []DayUsage    `json:"days"`
 }
 
 // Store uses a single SQLite connection to serialize writes and migrations.
@@ -131,10 +163,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db, now: time.Now}
 	_, err = db.Exec(`
-CREATE TABLE IF NOT EXISTS owners (
- id TEXT PRIMARY KEY, email TEXT NOT NULL, github_id INTEGER NOT NULL DEFAULT 0,
- login TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '',
- checked_at INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS owners (id TEXT PRIMARY KEY, email TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS tokens (
  id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owners(id), name TEXT NOT NULL,
  digest TEXT NOT NULL UNIQUE, prefix TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -158,21 +187,26 @@ CREATE TABLE IF NOT EXISTS quota_snapshots (
  id INTEGER PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL, window TEXT NOT NULL,
  period_seconds INTEGER NOT NULL, remaining REAL NOT NULL, reset_at INTEGER NOT NULL, observed_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);`)
-	// Check the column, not user_version: an older binary rewrites the version on rollback.
-	var profiled int
-	if err == nil {
-		err = db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('owners') WHERE name='login'`).Scan(&profiled)
+	// Columns added after the first release. Check each column rather than user_version,
+	// because an older binary rewrites the version on rollback.
+	for _, c := range [][3]string{
+		{"owners", "github_id", "INTEGER NOT NULL DEFAULT 0"},
+		{"owners", "login", "TEXT NOT NULL DEFAULT ''"},
+		{"owners", "name", "TEXT NOT NULL DEFAULT ''"},
+		{"owners", "avatar", "TEXT NOT NULL DEFAULT ''"},
+		{"owners", "checked_at", "INTEGER NOT NULL DEFAULT 0"},
+		{"events", "client", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		var exists int
+		if err == nil {
+			err = db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, c[0], c[1]).Scan(&exists)
+		}
+		if err == nil && exists == 0 {
+			_, err = db.Exec(`ALTER TABLE ` + c[0] + ` ADD COLUMN ` + c[1] + ` ` + c[2])
+		}
 	}
-	if err == nil && profiled == 0 {
-		_, err = db.Exec(`
-ALTER TABLE owners ADD COLUMN github_id INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE owners ADD COLUMN login TEXT NOT NULL DEFAULT '';
-ALTER TABLE owners ADD COLUMN name TEXT NOT NULL DEFAULT '';
-ALTER TABLE owners ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
-ALTER TABLE owners ADD COLUMN checked_at INTEGER NOT NULL DEFAULT 0;`)
-	}
 	if err == nil {
-		_, err = db.Exec(`PRAGMA user_version=3`)
+		_, err = db.Exec(`PRAGMA user_version=4`)
 	}
 	if err != nil {
 		_ = db.Close()
@@ -330,36 +364,6 @@ func (s *Store) ConfigureToken(ctx context.Context, id string, limit int64) erro
 	return changed(result, err)
 }
 
-func (s *Store) AddPrice(ctx context.Context, p Price) error {
-	if strings.TrimSpace(p.Provider) == "" || strings.TrimSpace(p.Model) == "" || len(p.Model) > 200 || len(p.Provider) > 80 {
-		return errors.New("provider and model are required")
-	}
-	for _, v := range []float64{p.Input, p.Output, p.CacheRead, p.CacheWrite} {
-		if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 1e6 {
-			return errors.New("rates must be between 0 and 1000000 USD per million tokens")
-		}
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO prices(provider,model,input,output,cache_read,cache_write) VALUES(?,?,?,?,?,?)`, p.Provider, p.Model, p.Input, p.Output, p.CacheRead, p.CacheWrite)
-	return err
-}
-
-func (s *Store) Prices(ctx context.Context) ([]Price, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,provider,model,input,output,cache_read,cache_write FROM prices WHERE id IN (SELECT MAX(id) FROM prices GROUP BY provider,model) ORDER BY provider,model`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := []Price{}
-	for rows.Next() {
-		var p Price
-		if err = rows.Scan(&p.ID, &p.Provider, &p.Model, &p.Input, &p.Output, &p.CacheRead, &p.CacheWrite); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}
-
 // RecordUsage stores canonical usage only; it never retains prompts or secrets.
 func (s *Store) RecordUsage(ctx context.Context, r usage.Record) error {
 	if r.AccessProvider != ProviderID || !strings.HasPrefix(r.APIKey, "pool:") {
@@ -394,23 +398,79 @@ func (s *Store) RecordUsage(ctx context.Context, r usage.Record) error {
 	if at.IsZero() {
 		at = s.now()
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO events(id,token_id,provider,model,timestamp,latency_ms,failed,tokens,input,output,cached,breakdown,price_id,cost_micros) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, r.RequestID, r.APIKey, r.Provider, r.Model, at.Unix(), r.Latency.Milliseconds(), r.Failed, d.TotalTokens, d.Input.TotalTokens, d.Output.TotalTokens, d.Input.CacheReadTokens, string(encoded), priceID, cost)
+	client, _ := ctx.Value(clientKey{}).(string)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO events(id,token_id,provider,model,timestamp,latency_ms,failed,tokens,input,output,cached,breakdown,price_id,cost_micros,client) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, r.RequestID, r.APIKey, r.Provider, r.Model, at.Unix(), r.Latency.Milliseconds(), r.Failed, d.TotalTokens, d.Input.TotalTokens, d.Output.TotalTokens, d.Input.CacheReadTokens, string(encoded), priceID, cost, client)
 	return err
 }
 
-func (s *Store) HandleUsage(_ context.Context, r usage.Record) {
+type clientKey struct{}
+
+// WithClient tags a request with the coding tool named by its User-Agent.
+func WithClient(ctx context.Context, userAgent string) context.Context {
+	client := "other"
+	switch ua := strings.ToLower(userAgent); {
+	case strings.HasPrefix(ua, "claude-cli/"):
+		client = "claude-code"
+	case strings.HasPrefix(ua, "codex"):
+		client = "codex"
+	}
+	return context.WithValue(ctx, clientKey{}, client)
+}
+
+func (s *Store) HandleUsage(ctx context.Context, r usage.Record) {
 	// The inbound request may already be canceled when a streaming record arrives.
-	if err := s.RecordUsage(context.Background(), r); err != nil {
+	if err := s.RecordUsage(context.WithoutCancel(ctx), r); err != nil {
 		log.WithError(err).Error("pool: persist usage event")
 	}
 }
 
 const aggregateSQL = `COUNT(*) AS requests,COALESCE(SUM(e.tokens),0) AS total_tokens,COALESCE(SUM(e.input),0),COALESCE(SUM(e.output),0),COALESCE(SUM(e.cached),0),COALESCE(SUM(e.failed),0),COUNT(e.cost_micros),COALESCE(SUM(e.cost_micros),0) AS total_cost`
 
-func (s *Store) Summary(ctx context.Context, owner string, since int64) (Aggregate, error) {
-	var a Aggregate
-	err := s.db.QueryRowContext(ctx, `SELECT `+aggregateSQL+` FROM events e JOIN tokens t ON t.id=e.token_id WHERE t.owner_id=? AND e.timestamp>=?`, owner, since).Scan(&a.Requests, &a.Tokens, &a.Input, &a.Output, &a.Cached, &a.Failures, &a.Priced, &a.CostMicros)
-	return a, err
+const clientSQL = `COALESCE(NULLIF(e.client,''),'other')`
+
+func breakdownSQL(path string) string {
+	return `COALESCE(json_extract(e.breakdown,'$.` + path + `'),0)`
+}
+
+// Usage totals one person's events by token type, coding tool, and UTC day.
+// Cost by type multiplies each event's tokens by the rate saved with it.
+func (s *Store) Usage(ctx context.Context, owner string, since int64) (Usage, error) {
+	u := Usage{Clients: []ClientUsage{}, Days: []DayUsage{}}
+	from := ` FROM events e JOIN tokens t ON t.id=e.token_id LEFT JOIN prices p ON p.id=e.price_id WHERE t.owner_id=? AND e.timestamp>=?`
+	uncached, read, write := breakdownSQL("input.uncached_tokens"), breakdownSQL("input.cache_read_tokens"), breakdownSQL("input.cache_write_tokens")
+	cost := func(expr string) string { return `CAST(ROUND(COALESCE(SUM(` + expr + `),0)) AS INTEGER)` }
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*),COALESCE(SUM(e.tokens),0),COALESCE(SUM(`+uncached+`),0),COALESCE(SUM(`+read+`),0),COALESCE(SUM(`+write+`),0),COALESCE(SUM(e.output),0),COUNT(e.cost_micros),COALESCE(SUM(e.cost_micros),0),`+
+		cost(uncached+`*p.input`)+`,`+cost(read+`*p.cache_read`)+`,`+cost(write+`*p.cache_write`)+`,`+cost(`e.output*p.output`)+`,`+cost(read+`*(p.input-p.cache_read)`)+from, owner, since).
+		Scan(&u.Requests, &u.Tokens, &u.Uncached, &u.CacheRead, &u.CacheWrite, &u.Output, &u.Priced, &u.CostMicros, &u.Cost.Uncached, &u.Cost.CacheRead, &u.Cost.CacheWrite, &u.Cost.Output, &u.SavingsMicros)
+	if err != nil {
+		return u, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+clientSQL+`,COUNT(*),COALESCE(SUM(e.tokens),0),COALESCE(SUM(e.cost_micros),0)`+from+` GROUP BY 1 ORDER BY 3 DESC`, owner, since)
+	if err != nil {
+		return u, err
+	}
+	for rows.Next() {
+		var c ClientUsage
+		if err = rows.Scan(&c.Client, &c.Requests, &c.Tokens, &c.CostMicros); err != nil {
+			_ = rows.Close()
+			return u, err
+		}
+		u.Clients = append(u.Clients, c)
+	}
+	_ = rows.Close()
+	rows, err = s.db.QueryContext(ctx, `SELECT strftime('%Y-%m-%d',e.timestamp,'unixepoch'),`+clientSQL+`,COALESCE(SUM(e.tokens),0),COALESCE(SUM(e.cost_micros),0)`+from+` GROUP BY 1,2 ORDER BY 1`, owner, since)
+	if err != nil {
+		return u, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var d DayUsage
+		if err = rows.Scan(&d.Date, &d.Client, &d.Tokens, &d.CostMicros); err != nil {
+			return u, err
+		}
+		u.Days = append(u.Days, d)
+	}
+	return u, rows.Err()
 }
 
 func (s *Store) Leaders(ctx context.Context, since int64, metric string) ([]Leader, error) {
@@ -430,13 +490,34 @@ func (s *Store) Leaders(ctx context.Context, since int64, metric string) ([]Lead
 		if err != nil {
 			return nil, err
 		}
+		l.Clients = []ClientUsage{}
 		out = append(out, l)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	_ = rows.Close()
+	rows, err = s.db.QueryContext(ctx, `SELECT t.owner_id,`+clientSQL+`,COUNT(*),COALESCE(SUM(e.tokens),0),COALESCE(SUM(e.cost_micros),0) FROM events e JOIN tokens t ON t.id=e.token_id WHERE e.timestamp>=? GROUP BY 1,2 ORDER BY 4 DESC`, since)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var owner string
+		var c ClientUsage
+		if err = rows.Scan(&owner, &c.Client, &c.Requests, &c.Tokens, &c.CostMicros); err != nil {
+			return nil, err
+		}
+		for i := range out {
+			if out[i].ID == owner {
+				out[i].Clients = append(out[i].Clients, c)
+			}
+		}
 	}
 	return out, rows.Err()
 }
 
 func (s *Store) Events(ctx context.Context, owner string, since int64) ([]Event, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT e.id,t.name,e.provider,e.model,e.timestamp,e.latency_ms,e.failed,e.tokens,e.cost_micros FROM events e JOIN tokens t ON t.id=e.token_id WHERE t.owner_id=? AND e.timestamp>=? ORDER BY e.timestamp DESC,e.id LIMIT 100`, owner, since)
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id,t.name,e.provider,e.model,e.timestamp,e.latency_ms,e.failed,e.tokens,e.cost_micros,`+clientSQL+` FROM events e JOIN tokens t ON t.id=e.token_id WHERE t.owner_id=? AND e.timestamp>=? ORDER BY e.timestamp DESC,e.id LIMIT 100`, owner, since)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +525,7 @@ func (s *Store) Events(ctx context.Context, owner string, since int64) ([]Event,
 	out := []Event{}
 	for rows.Next() {
 		var e Event
-		err = rows.Scan(&e.ID, &e.TokenName, &e.Provider, &e.Model, &e.Timestamp, &e.LatencyMs, &e.Failed, &e.Tokens, &e.CostMicros)
+		err = rows.Scan(&e.ID, &e.TokenName, &e.Provider, &e.Model, &e.Timestamp, &e.LatencyMs, &e.Failed, &e.Tokens, &e.CostMicros, &e.Client)
 		if err != nil {
 			return nil, err
 		}
@@ -464,21 +545,4 @@ func (s *Store) FirstEvent(ctx context.Context, tokenID string) (*Event, error) 
 		return nil, err
 	}
 	return &e, nil
-}
-
-func (s *Store) Activity(ctx context.Context, owner string, since int64) ([]Day, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT strftime('%Y-%m-%d',e.timestamp,'unixepoch'),SUM(e.tokens),COUNT(*) FROM events e JOIN tokens t ON t.id=e.token_id WHERE t.owner_id=? AND e.timestamp>=? GROUP BY 1 ORDER BY 1`, owner, since)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := []Day{}
-	for rows.Next() {
-		var d Day
-		if err = rows.Scan(&d.Date, &d.Tokens, &d.Requests); err != nil {
-			return nil, err
-		}
-		out = append(out, d)
-	}
-	return out, rows.Err()
 }
