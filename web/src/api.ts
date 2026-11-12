@@ -99,6 +99,13 @@ export type QuotaAccount = {
   auth_status: string;
   message: string;
   cooldown_until: number;
+  // Provider-granted usage resets (Claude reset grants, Codex reset credits).
+  free_reset?: {
+    left: number;
+    usable: boolean;
+    expires?: number;
+    note?: string;
+  };
   day: { requests: number; cost_micros: number; last_used: number };
 };
 export type QuotaPool = {

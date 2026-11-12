@@ -692,17 +692,29 @@ function accountState(account: QuotaAccount, now: number) {
 function AccountMenu({ account }: { account: QuotaAccount }) {
   const client = useQueryClient();
   const act = useMutation({
-    mutationFn: (action: "disable" | "enable" | "reset") =>
+    mutationFn: (action: "disable" | "enable" | "reset" | "free-reset") =>
       api(`/admin/accounts/${encodeURIComponent(account.id)}/${action}`, {
         method: "POST",
       }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ["quota"] }),
     onError: (error) => window.alert(error.message),
   });
+  const free = account.free_reset;
+  const limited = account.windows.some((w) => w.remaining <= 0);
+  const useFree = () => {
+    const name = account.email || "this account";
+    const question = limited
+      ? `Use 1 of ${free?.left} free resets on ${name}? Its usage limits go back to zero.`
+      : `${name} still has quota left. A reset now clears usage it hasn't run out of, which wastes it. Use 1 of ${free?.left} anyway?`;
+    if (window.confirm(question)) act.mutate("free-reset");
+  };
   return (
     <Menu
       label={"Actions for " + (account.email || account.id)}
       items={[
+        ...(free?.usable
+          ? [{ label: `Use free reset (${free.left} left)`, onSelect: useFree }]
+          : []),
         ...(account.cooldown_until
           ? [{ label: "Retry now", onSelect: () => act.mutate("reset") }]
           : []),
@@ -785,19 +797,45 @@ function AccountRows({
                     account.provider + "-" + account.id.slice(0, 6)}
                 </span>
               </span>
-              <span
-                title={
-                  [
-                    state.title,
-                    account.checked_at &&
-                      "Checked " + relative(account.checked_at, now),
-                  ]
-                    .filter(Boolean)
-                    .join("\n") || undefined
-                }
+              <div
+                className={css({
+                  display: "flex",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                })}
               >
-                <Chip color={state.color}>{state.label}</Chip>
-              </span>
+                <span
+                  title={
+                    [
+                      state.title,
+                      account.checked_at &&
+                        "Checked " + relative(account.checked_at, now),
+                    ]
+                      .filter(Boolean)
+                      .join("\n") || undefined
+                  }
+                >
+                  <Chip color={state.color}>{state.label}</Chip>
+                </span>
+                {account.free_reset && account.free_reset.left > 0 && (
+                  <span
+                    title={[
+                      "Free usage resets from the provider. Each one sets this account's limits back to zero.",
+                      account.free_reset.expires &&
+                        "Next one expires " +
+                          numericDateTime(account.free_reset.expires),
+                      account.free_reset.note,
+                    ]
+                      .filter(Boolean)
+                      .join("\n")}
+                  >
+                    <Chip color={palette.violet}>
+                      {account.free_reset.left} free{" "}
+                      {account.free_reset.left === 1 ? "reset" : "resets"}
+                    </Chip>
+                  </span>
+                )}
+              </div>
             </div>
             {windows.length ? (
               <div
