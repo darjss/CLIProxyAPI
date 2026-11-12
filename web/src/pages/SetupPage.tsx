@@ -30,14 +30,14 @@ type Harness = {
   models: string[];
   files: Record<string, ConfigFile[]>;
 };
-type HarnessID = "claude" | "codex" | "opencode" | "pi";
+type HarnessID = "claude" | "codex";
 type SetupCode = { code: string; command: string; expires_at: number };
 type SetupStatus = {
   status: "waiting" | "installed" | "expired";
   first?: UsageEvent | null;
 };
 
-const harnessOrder: HarnessID[] = ["claude", "codex", "opencode", "pi"];
+const harnessOrder: HarnessID[] = ["claude", "codex"];
 const modelLabels: Record<string, string> = {
   "claude-opus-5-5": "Opus 5.5",
   "claude-fable-5-1": "Fable 5.1",

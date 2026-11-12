@@ -46,7 +46,7 @@ provider; Pool does not implement a second signup/login flow. Inference routes
 require only a valid Pool API token and do not require a browser session or
 Cloudflare service credentials.
 
-Quick Start sets up Claude Code, Codex, OpenCode, or Pi with one command. The
+Quick Start sets up Claude Code or Codex with one command. The
 page creates a single-use code that expires after 10 minutes and shows
 `curl -fsSL https://pool.erxes.tech/setup/<code> | sh`. Fetching that script
 consumes the code, creates a token for the member, and embeds it. The script
