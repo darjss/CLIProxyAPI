@@ -3,7 +3,6 @@ package pool
 import (
 	"context"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MoeForge/moego/base64"
 	"github.com/golang-jwt/jwt/v5"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
 )

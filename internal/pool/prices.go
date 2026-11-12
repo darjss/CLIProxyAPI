@@ -2,13 +2,14 @@ package pool
 
 import (
 	"context"
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,42 +33,40 @@ func (s *Store) SyncPrices(ctx context.Context, client *http.Client) error {
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("models.dev: HTTP %d", response.StatusCode)
 	}
-	var catalog map[string]struct {
-		Models map[string]struct {
-			Cost *struct {
-				Input      float64 `json:"input"`
-				Output     float64 `json:"output"`
-				CacheRead  float64 `json:"cache_read"`
-				CacheWrite float64 `json:"cache_write"`
-			} `json:"cost"`
-		} `json:"models"`
-	}
-	if err = json.NewDecoder(io.LimitReader(response.Body, 64<<20)).Decode(&catalog); err != nil {
+	catalog, err := io.ReadAll(io.LimitReader(response.Body, 64<<20))
+	if err != nil {
 		return err
+	}
+	if !ojson.ValidBytes(catalog) {
+		return fmt.Errorf("models.dev: invalid JSON")
 	}
 	added := 0
 	for provider, source := range priceSources {
-		for model, m := range catalog[source].Models {
-			if m.Cost == nil || len(model) > 200 {
-				continue
+		ojson.GetBytes(catalog, source+".models").ForEach(func(key, m ojson.Result) bool {
+			model, cost := key.String(), m.Get("cost")
+			if !cost.Exists() || len(model) > 200 {
+				return true
 			}
-			rates := []float64{m.Cost.Input, m.Cost.Output, m.Cost.CacheRead, m.Cost.CacheWrite}
-			valid := true
+			rates := []float64{cost.Get("input").Float(), cost.Get("output").Float(), cost.Get("cache_read").Float(), cost.Get("cache_write").Float()}
 			for _, v := range rates {
-				valid = valid && !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 1e6
+				if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 || v > 1e6 {
+					return true
+				}
 			}
-			if !valid {
-				continue
-			}
-			result, errInsert := s.db.ExecContext(ctx, `INSERT INTO prices(provider,model,input,output,cache_read,cache_write)
+			var result sql.Result
+			result, err = s.db.ExecContext(ctx, `INSERT INTO prices(provider,model,input,output,cache_read,cache_write)
 SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM prices WHERE id=(SELECT MAX(id) FROM prices WHERE provider=? AND model=?)
  AND input=? AND output=? AND cache_read=? AND cache_write=?)`, provider, model, rates[0], rates[1], rates[2], rates[3], provider, model, rates[0], rates[1], rates[2], rates[3])
-			if errInsert != nil {
-				return errInsert
+			if err != nil {
+				return false
 			}
 			if n, _ := result.RowsAffected(); n > 0 {
 				added++
 			}
+			return true
+		})
+		if err != nil {
+			return err
 		}
 	}
 	// Same formula as RecordUsage: tokens times USD per million tokens is micro-USD.
@@ -87,24 +86,6 @@ WHERE price_id IS NULL AND json_extract(breakdown,'$.quality')='complete'
 	priced, _ := result.RowsAffected()
 	log.WithFields(log.Fields{"new_rates": added, "priced_events": priced}).Info("pool: synced models.dev prices")
 	return nil
-}
-
-// LatestPrices returns the current rate per "provider/model".
-func (s *Store) LatestPrices(ctx context.Context) (map[string]Price, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,provider,model,input,output,cache_read,cache_write FROM prices WHERE id IN (SELECT MAX(id) FROM prices GROUP BY provider,model)`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]Price{}
-	for rows.Next() {
-		var p Price
-		if err = rows.Scan(&p.ID, &p.Provider, &p.Model, &p.Input, &p.Output, &p.CacheRead, &p.CacheWrite); err != nil {
-			return nil, err
-		}
-		out[p.Provider+"/"+p.Model] = p
-	}
-	return out, rows.Err()
 }
 
 // RunPriceSync refreshes prices now and then daily until ctx ends.

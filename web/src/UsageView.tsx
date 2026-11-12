@@ -18,7 +18,76 @@ import {
   type Period,
   type Usage,
 } from "./api";
-import { EmptyState, ErrorState, Loading, palette } from "./ui";
+import {
+  EmptyState,
+  ErrorState,
+  Loading,
+  ProviderIcon,
+  palette,
+  table,
+  tableScroll,
+} from "./ui";
+
+const percent = new Intl.NumberFormat("en", {
+  style: "percent",
+  maximumFractionDigits: 1,
+});
+
+/** Cost or tokens per model, largest first, with cache hit and share of the total. */
+function ModelTable({ usage, metric }: { usage: Usage; metric: Metric }) {
+  if (!usage.models.length) return null;
+  const total = metric === "cost" ? usage.cost_micros : usage.tokens;
+  return (
+    <div className={css({ display: "grid", gap: "8px" })}>
+      <span className={css({ fontSize: "16px", fontWeight: 500 })}>
+        By model
+      </span>
+      <div className={tableScroll}>
+        <table className={table}>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Requests</th>
+              <th>Tokens</th>
+              <th>Cache hit</th>
+              <th>Cost</th>
+              <th>Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {usage.models.map((m) => {
+              const value = metric === "cost" ? m.cost_micros : m.tokens;
+              return (
+                <tr key={m.provider + m.model}>
+                  <td>
+                    <span
+                      className={css({
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        color: "fg",
+                      })}
+                    >
+                      <ProviderIcon provider={m.provider} size={15} />
+                      {m.model}
+                    </span>
+                  </td>
+                  <td>{number.format(m.requests)}</td>
+                  <td>{number.format(m.tokens)}</td>
+                  <td>{m.input ? percent.format(m.cached / m.input) : "—"}</td>
+                  <td className={css({ color: "fg" })}>
+                    {dollars(m.cost_micros)}
+                  </td>
+                  <td>{total ? percent.format(value / total) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export const clients: Record<string, { label: string; color: string }> = {
   "claude-code": { label: "Claude Code", color: palette.claude },
@@ -163,21 +232,18 @@ export function UsageView({
         })}
       >
         <Figure label="Processed tokens">{number.format(u.tokens)}</Figure>
-        <Figure label="Cached input" color={palette.teal}>
-          {number.format(u.cache_read)}
-        </Figure>
-        <Figure label="Uncached input" color={palette.blue}>
+        <Figure label="Cached input">{number.format(u.cache_read)}</Figure>
+        <Figure label="Uncached input">
           {number.format(u.uncached + u.cache_write)}
         </Figure>
-        <Figure label="Output" color={palette.pink}>
-          {number.format(u.output)}
-        </Figure>
+        <Figure label="Output">{number.format(u.output)}</Figure>
         <Figure label="Cache savings" color={palette.ok}>
           {dollars(u.savings_micros)}
         </Figure>
       </div>
 
       <TypeBar usage={u} metric={metric} />
+      <ModelTable usage={u} metric={metric} />
     </div>
   );
 }
@@ -340,25 +406,25 @@ function TypeBar({ usage, metric }: { usage: Usage; metric: Metric }) {
   const parts = [
     {
       label: "Input",
-      color: palette.blue,
+      color: "#3f5bd1",
       tokens: usage.uncached,
       cost: usage.cost.uncached,
     },
     {
       label: "Cache read",
-      color: palette.teal,
+      color: "#6f88ee",
       tokens: usage.cache_read,
       cost: usage.cost.cache_read,
     },
     {
       label: "Cache write",
-      color: palette.warn,
+      color: "#a6b7fb",
       tokens: usage.cache_write,
       cost: usage.cost.cache_write,
     },
     {
       label: "Output",
-      color: palette.pink,
+      color: "#e3e9ff",
       tokens: usage.output,
       cost: usage.cost.output,
     },

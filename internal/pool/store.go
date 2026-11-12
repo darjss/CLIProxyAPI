@@ -124,7 +124,18 @@ type Usage struct {
 	// SavingsMicros is what cache reads would have cost at the uncached input rate.
 	SavingsMicros int64         `json:"savings_micros"`
 	Clients       []ClientUsage `json:"clients"`
+	Models        []ModelUsage  `json:"models"`
 	Days          []DayUsage    `json:"days"`
+}
+
+type ModelUsage struct {
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+	Requests   int64  `json:"requests"`
+	Tokens     int64  `json:"tokens"`
+	Input      int64  `json:"input"`
+	Cached     int64  `json:"cached"`
+	CostMicros int64  `json:"cost_micros"`
 }
 
 // Store uses a single SQLite connection to serialize writes and migrations.
@@ -532,7 +543,7 @@ func breakdownSQL(path string) string {
 // Usage totals one person's events by token type, coding tool, and UTC day.
 // Cost by type multiplies each event's tokens by the rate saved with it.
 func (s *Store) Usage(ctx context.Context, owner string, since int64) (Usage, error) {
-	u := Usage{Clients: []ClientUsage{}, Days: []DayUsage{}}
+	u := Usage{Clients: []ClientUsage{}, Models: []ModelUsage{}, Days: []DayUsage{}}
 	from := ` FROM events e JOIN tokens t ON t.id=e.token_id LEFT JOIN prices p ON p.id=e.price_id WHERE t.owner_id=? AND e.timestamp>=?`
 	uncached, read, write := breakdownSQL("input.uncached_tokens"), breakdownSQL("input.cache_read_tokens"), breakdownSQL("input.cache_write_tokens")
 	cost := func(expr string) string { return `CAST(ROUND(COALESCE(SUM(` + expr + `),0)) AS INTEGER)` }
@@ -553,6 +564,19 @@ func (s *Store) Usage(ctx context.Context, owner string, since int64) (Usage, er
 			return u, err
 		}
 		u.Clients = append(u.Clients, c)
+	}
+	_ = rows.Close()
+	rows, err = s.db.QueryContext(ctx, `SELECT e.provider,e.model,COUNT(*),COALESCE(SUM(e.tokens),0),COALESCE(SUM(e.input),0),COALESCE(SUM(e.cached),0),COALESCE(SUM(e.cost_micros),0)`+from+` GROUP BY 1,2 ORDER BY 7 DESC,4 DESC`, owner, since)
+	if err != nil {
+		return u, err
+	}
+	for rows.Next() {
+		var m ModelUsage
+		if err = rows.Scan(&m.Provider, &m.Model, &m.Requests, &m.Tokens, &m.Input, &m.Cached, &m.CostMicros); err != nil {
+			_ = rows.Close()
+			return u, err
+		}
+		u.Models = append(u.Models, m)
 	}
 	_ = rows.Close()
 	rows, err = s.db.QueryContext(ctx, `SELECT strftime('%Y-%m-%d',e.timestamp,'unixepoch'),`+clientSQL+`,COALESCE(SUM(e.tokens),0),COALESCE(SUM(e.cost_micros),0)`+from+` GROUP BY 1,2 ORDER BY 1`, owner, since)

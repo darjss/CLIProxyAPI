@@ -5,7 +5,14 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Check, CircleAlert, Copy, LoaderCircle, X } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  Copy,
+  Ellipsis,
+  LoaderCircle,
+  X,
+} from "lucide-react";
 import { css, cx } from "../styled-system/css";
 import { button, iconButton } from "../styled-system/recipes";
 
@@ -383,6 +390,86 @@ export const tiers = [
 ] as const;
 
 /** A small status label tinted with one palette color. */
+/** A ⋯ button that opens a small list of actions. Closes on pick, outside click, or Escape. */
+export function Menu({
+  label,
+  items,
+}: {
+  label: string;
+  items: { label: string; onSelect: () => void; danger?: boolean }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className={css({ position: "relative" })}>
+      <button
+        className={iconButton()}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Ellipsis size={18} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className={css({
+            position: "absolute",
+            right: 0,
+            top: "calc(100% + 6px)",
+            zIndex: 20,
+            minWidth: "190px",
+            padding: "4px",
+            borderRadius: "10px",
+            background: "raised",
+            border: "1px solid token(colors.edge)",
+          })}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+              className={css({
+                display: "block",
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: "7px",
+                textAlign: "left",
+                fontSize: "14px",
+                _hover: { background: "active" },
+              })}
+              style={{ color: item.danger ? palette.bad : undefined }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Chip({
   color,
   children,

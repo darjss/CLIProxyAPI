@@ -32,7 +32,7 @@ const cacheHit = (l: Leader) => (l.input ? l.cached / l.input : 0);
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState<Period>("7d");
   const [open, setOpen] = useState<Leader | null>(null);
-  const leaders = useQuery(queries.leaders(period, "cost"));
+  const leaders = useQuery(queries.leaders(period, "tokens"));
 
   return (
     <>
@@ -67,7 +67,7 @@ export default function LeaderboardPage() {
           title={<Person person={open} size={28} />}
           onClose={() => setOpen(null)}
         >
-          <UsageView period={period} metric="cost" owner={open.id} />
+          <UsageView period={period} metric="tokens" owner={open.id} />
         </Modal>
       )}
     </>
@@ -81,8 +81,8 @@ function Board({
   leaders: Leader[];
   onOpen: (l: Leader) => void;
 }) {
-  const pool = leaders.reduce((sum, l) => sum + l.cost_micros, 0);
-  const share = (l: Leader) => (pool ? l.cost_micros / pool : 0);
+  const pool = leaders.reduce((sum, l) => sum + l.tokens, 0);
+  const share = (l: Leader) => (pool ? l.tokens / pool : 0);
 
   return (
     <div className={css({ display: "grid", gap: "20px" })}>
@@ -158,11 +158,22 @@ function Board({
                   fontVariantNumeric: "tabular-nums",
                 })}
               >
-                {dollars(l.cost_micros)}
+                {number.format(l.tokens)}
+                <span
+                  className={css({
+                    fontSize: "15px",
+                    fontWeight: 500,
+                    color: "dim",
+                    marginLeft: "6px",
+                    letterSpacing: 0,
+                  })}
+                >
+                  tokens
+                </span>
               </strong>
               <span className={css({ color: "dim", fontSize: "14px" })}>
                 {percent.format(share(l))} of the pool ·{" "}
-                {number.format(l.tokens)} tokens
+                {dollars(l.cost_micros)}
               </span>
             </button>
           );
@@ -199,11 +210,10 @@ function Board({
                   smDown: { display: "none" },
                 })}
               >
-                {number.format(l.tokens)} tokens · {percent.format(cacheHit(l))}{" "}
-                cache
+                {dollars(l.cost_micros)} · {percent.format(cacheHit(l))} cache
               </span>
               <strong className={css({ fontVariantNumeric: "tabular-nums" })}>
-                {dollars(l.cost_micros)}
+                {number.format(l.tokens)} tokens
               </strong>
             </button>
           ))}

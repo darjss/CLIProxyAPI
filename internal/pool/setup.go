@@ -2,8 +2,6 @@ package pool
 
 import (
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -11,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MoeForge/moego/base64"
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
@@ -172,13 +172,13 @@ func (s *Setups) register(r *gin.Engine, g *gin.RouterGroup) {
 			c.String(http.StatusInternalServerError, "echo 'Pool could not create a token. Try again.' >&2; exit 1\n")
 			return
 		}
-		spec, err := json.Marshal(map[string]any{"files": h.files(v.base, v.model, secret)})
-		if err != nil {
+		spec := ojson.NewDoc([]byte(`{}`))
+		if err = spec.Set("files", h.files(v.base, v.model, secret)); err != nil {
 			respond(c, nil, err)
 			return
 		}
 		c.Header("Content-Type", "text/x-shellscript; charset=utf-8")
-		c.String(http.StatusOK, setupScript(h, secret, base64.StdEncoding.EncodeToString(spec)))
+		c.String(http.StatusOK, setupScript(h, secret, base64.StdEncoding.EncodeToString(spec.Bytes())))
 	})
 }
 

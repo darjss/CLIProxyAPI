@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MoeForge/moego/ojson"
 )
 
 // GitHub resolves the public GitHub profile behind an Access login without a GitHub App.
@@ -48,46 +49,38 @@ func (g *GitHub) Profile(ctx context.Context, assertion string) (Profile, error)
 	if id <= 0 {
 		return Profile{}, errors.New("no GitHub account on this identity")
 	}
-	var user struct {
-		Login     string `json:"login"`
-		Name      string `json:"name"`
-		AvatarURL string `json:"avatar_url"`
-	}
-	if err := g.get(ctx, g.APIBase+"/user/"+strconv.FormatInt(id, 10), nil, &user); err != nil {
+	user, err := g.get(ctx, g.APIBase+"/user/"+strconv.FormatInt(id, 10), nil)
+	if err != nil {
 		return Profile{}, err
 	}
-	if !githubLogin.MatchString(user.Login) {
+	p := Profile{ID: id, Login: ojson.GetBytes(user, "login").String(), Name: ojson.GetBytes(user, "name").String(), Avatar: ojson.GetBytes(user, "avatar_url").String()}
+	if !githubLogin.MatchString(p.Login) {
 		return Profile{}, errors.New("invalid GitHub login")
 	}
-	if !strings.HasPrefix(user.AvatarURL, "https://avatars.githubusercontent.com/") {
-		user.AvatarURL = ""
+	if !strings.HasPrefix(p.Avatar, "https://avatars.githubusercontent.com/") {
+		p.Avatar = ""
 	}
-	if len(user.Name) > 100 {
-		user.Name = user.Name[:100]
+	if len(p.Name) > 100 {
+		p.Name = p.Name[:100]
 	}
-	return Profile{ID: id, Login: user.Login, Name: user.Name, Avatar: user.AvatarURL}, nil
+	return p, nil
 }
 
 func (g *GitHub) accessGitHubID(ctx context.Context, assertion string) (int64, error) {
-	var identity struct {
-		ID  json.RawMessage `json:"id"`
-		IdP struct {
-			Type string `json:"type"`
-		} `json:"idp"`
-	}
-	if err := g.get(ctx, g.IdentityURL, &http.Cookie{Name: "CF_Authorization", Value: assertion}, &identity); err != nil {
+	identity, err := g.get(ctx, g.IdentityURL, &http.Cookie{Name: "CF_Authorization", Value: assertion})
+	if err != nil {
 		return 0, err
 	}
-	if identity.IdP.Type != "github" {
+	if ojson.GetBytes(identity, "idp.type").String() != "github" {
 		return 0, errors.New("Access identity is not from GitHub")
 	}
-	return strconv.ParseInt(strings.Trim(string(identity.ID), `"`), 10, 64)
+	return strconv.ParseInt(ojson.GetBytes(identity, "id").String(), 10, 64)
 }
 
-func (g *GitHub) get(ctx context.Context, url string, cookie *http.Cookie, out any) error {
+func (g *GitHub) get(ctx context.Context, url string, cookie *http.Cookie) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "pool")
@@ -96,11 +89,15 @@ func (g *GitHub) get(ctx context.Context, url string, cookie *http.Cookie, out a
 	}
 	response, err := g.Client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("profile lookup: HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("profile lookup: HTTP %d", response.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(out)
+	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err == nil && !ojson.ValidBytes(body) {
+		err = errors.New("profile lookup: invalid JSON")
+	}
+	return body, err
 }

@@ -14,7 +14,6 @@ import {
   api,
   dollars,
   number,
-  type PoolModel,
   type QuotaAccount,
   type QuotaPool,
   type QuotaSample,
@@ -33,6 +32,7 @@ import {
   EmptyState,
   ErrorState,
   Loading,
+  Menu,
   Modal,
   PageHeader,
   ProviderIcon,
@@ -41,10 +41,7 @@ import {
   card,
   formError,
   palette,
-  primaryCell,
   providerName,
-  table,
-  tableScroll,
 } from "../ui";
 import { QuotaChart, type View } from "./QuotaChart";
 
@@ -64,7 +61,6 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
   const [view, setView] = useState<View>("remaining");
   const [hours, setHours] = useState<Hours>("3");
   const [scenario, setScenario] = useState<Scenario>("same");
-  const [tab, setTab] = useState<"quota" | "models">("quota");
   const [connecting, setConnecting] = useState(false);
   const [shift, setShift] = useState(0);
   const quota = useQuery({
@@ -84,9 +80,6 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
   const now = quota.data?.observed_at || Math.floor(Date.now() / 1000);
   const count = (value: string) =>
     accounts.filter((account) => account.provider === value).length;
-  const reporting = accounts.filter(
-    (account) => account.status === "ok",
-  ).length;
 
   // Every chart shares one time window so the cards line up vertically.
   const horizon = Math.max(
@@ -101,29 +94,7 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
 
   return (
     <>
-      <PageHeader
-        title="Accounts"
-        meta={
-          quota.data && (
-            <>
-              {accounts.length} {accounts.length === 1 ? "account" : "accounts"}
-              <span className={css({ color: "faint", marginInline: "8px" })}>
-                ·
-              </span>
-              {reporting} reporting
-            </>
-          )
-        }
-      >
-        <Segmented
-          label="View"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: "quota", label: "Quota" },
-            { value: "models", label: "Models" },
-          ]}
-        />
+      <PageHeader title="Accounts">
         {admin && (
           <button
             className={button()}
@@ -160,9 +131,7 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
         </p>
       )}
 
-      {tab === "models" ? (
-        <Models />
-      ) : (
+      {
         <>
           <div className={css({ marginBottom: "14px" })}>
             <Segmented
@@ -341,80 +310,8 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
             </div>
           )}
         </>
-      )}
+      }
     </>
-  );
-}
-
-function Models() {
-  const models = useQuery({
-    queryKey: ["models"],
-    queryFn: ({ signal }) => api<PoolModel[]>("/models", { signal }),
-  });
-  if (models.isError)
-    return (
-      <ErrorState error={models.error} retry={() => void models.refetch()} />
-    );
-  if (models.isPending) return <Loading />;
-  if (!models.data.length)
-    return (
-      <div className={card}>
-        <EmptyState
-          title="No models yet."
-          description="Models appear once an enabled account is connected."
-        />
-      </div>
-    );
-  const rate = (v?: number) => (v === undefined ? "—" : "$" + v);
-  return (
-    <div className={cx(card, tableScroll)}>
-      <table className={table}>
-        <thead>
-          <tr>
-            <th>Model</th>
-            <th>Accounts</th>
-            <th title="USD per million tokens">Input</th>
-            <th>Cache read</th>
-            <th>Cache write</th>
-            <th>Output</th>
-          </tr>
-        </thead>
-        <tbody>
-          {models.data.map((m) => (
-            <tr key={m.provider + m.id}>
-              <td className={primaryCell}>
-                <span
-                  className={css({
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  })}
-                >
-                  <ProviderIcon provider={m.provider} size={15} />
-                  {m.id}
-                </span>
-              </td>
-              <td title={m.accounts.join("\n")}>
-                <Chip
-                  color={
-                    colors[m.provider as "claude" | "codex"] ?? palette.gray
-                  }
-                >
-                  {m.accounts.length}
-                </Chip>
-              </td>
-              <td>{rate(m.price?.input)}</td>
-              <td>{rate(m.price?.cache_read)}</td>
-              <td>{rate(m.price?.cache_write)}</td>
-              <td>{rate(m.price?.output)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className={css({ color: "faint", fontSize: "13px", mt: "12px" })}>
-        API rates per million tokens, from models.dev.
-      </p>
-    </div>
   );
 }
 
@@ -780,30 +677,44 @@ function accountState(account: QuotaAccount, now: number) {
     };
   if (account.status === "sign_in_required")
     return { label: "Sign-in expired · reconnect", color: palette.bad };
+  // After an upstream 429 or error, Pool skips the account until this time.
+  if (account.cooldown_until > now)
+    return {
+      label: `Paused · retrying ${relative(account.cooldown_until, now)}`,
+      color: palette.warn,
+      title: account.message,
+    };
   if (account.auth_status === "error" || account.status !== "ok")
     return { label: "Error", color: palette.bad, title: account.message };
   return { label: "Active", color: palette.ok };
 }
 
-function AccountToggle({ account }: { account: QuotaAccount }) {
+function AccountMenu({ account }: { account: QuotaAccount }) {
   const client = useQueryClient();
-  const toggle = useMutation({
-    mutationFn: () =>
-      api(`/admin/accounts/${encodeURIComponent(account.id)}`, {
-        method: "PUT",
-        body: JSON.stringify({ disabled: !account.disabled }),
+  const act = useMutation({
+    mutationFn: (action: "disable" | "enable" | "reset") =>
+      api(`/admin/accounts/${encodeURIComponent(account.id)}/${action}`, {
+        method: "POST",
       }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ["quota"] }),
+    onError: (error) => window.alert(error.message),
   });
   return (
-    <button
-      className={button({ size: "md" })}
-      disabled={toggle.isPending}
-      title={toggle.isError ? toggle.error.message : undefined}
-      onClick={() => toggle.mutate()}
-    >
-      {account.disabled ? "Enable" : "Disable"}
-    </button>
+    <Menu
+      label={"Actions for " + (account.email || account.id)}
+      items={[
+        ...(account.cooldown_until
+          ? [{ label: "Retry now", onSelect: () => act.mutate("reset") }]
+          : []),
+        account.disabled
+          ? { label: "Enable", onSelect: () => act.mutate("enable") }
+          : {
+              label: "Disable",
+              danger: true,
+              onSelect: () => act.mutate("disable"),
+            },
+      ]}
+    />
   );
 }
 
@@ -833,21 +744,30 @@ function AccountRows({
             key={account.id}
             className={css({
               display: "grid",
-              gridTemplateColumns: "minmax(200px, 1fr) minmax(0, 3fr)",
-              gap: "16px 40px",
+              gridTemplateColumns:
+                "minmax(220px, 1.2fr) minmax(0, 3fr) 96px 36px",
+              gap: "16px 32px",
               alignItems: "center",
-              padding: "20px 0",
+              padding: "18px 0",
               borderBottom: "1px solid token(colors.line)",
               _last: { borderBottom: 0, paddingBottom: 0 },
-              mdDown: { gridTemplateColumns: "minmax(0, 1fr)" },
+              mdDown: { gridTemplateColumns: "minmax(0, 1fr) auto" },
             })}
           >
-            <div className={css({ display: "grid", gap: "3px", minWidth: 0 })}>
+            <div
+              className={css({
+                display: "grid",
+                gap: "8px",
+                justifyItems: "start",
+                minWidth: 0,
+              })}
+            >
               <span
                 className={css({
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
+                  maxWidth: "100%",
                 })}
               >
                 <ProviderIcon provider={account.provider} size={15} />
@@ -858,6 +778,7 @@ function AccountRows({
                     color: "fg",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   })}
                 >
                   {account.email ||
@@ -865,33 +786,27 @@ function AccountRows({
                 </span>
               </span>
               <span
-                className={css({
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  flexWrap: "wrap",
-                })}
+                title={
+                  [
+                    state.title,
+                    account.checked_at &&
+                      "Checked " + relative(account.checked_at, now),
+                  ]
+                    .filter(Boolean)
+                    .join("\n") || undefined
+                }
               >
-                <span title={state.title}>
-                  <Chip color={state.color}>{state.label}</Chip>
-                </span>
-                {admin && <AccountToggle account={account} />}
-              </span>
-              <span className={css({ color: "faint", fontSize: "14px" })}>
-                {account.day.requests
-                  ? `${number.format(account.day.requests)} requests · ${dollars(account.day.cost_micros)} in 24h`
-                  : "No requests in 24h"}
-                {account.checked_at
-                  ? " · checked " + relative(account.checked_at, now)
-                  : ""}
+                <Chip color={state.color}>{state.label}</Chip>
               </span>
             </div>
             {windows.length ? (
               <div
                 className={css({
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                   gap: "18px 32px",
+                  mdDown: { gridColumn: "1 / -1", order: 3 },
+                  smDown: { gridTemplateColumns: "minmax(0, 1fr)" },
                 })}
               >
                 {windows.map((sample) => (
@@ -954,10 +869,38 @@ function AccountRows({
                 ))}
               </div>
             ) : (
-              <span className={css({ color: "faint", fontSize: "14px" })}>
-                No windows reported
+              <span
+                className={css({
+                  color: "faint",
+                  fontSize: "14px",
+                  mdDown: { gridColumn: "1 / -1", order: 3 },
+                })}
+              >
+                No quota reported yet
               </span>
             )}
+            <div
+              title="Last 24 hours"
+              className={css({
+                display: "grid",
+                gap: "2px",
+                textAlign: "right",
+                fontVariantNumeric: "tabular-nums",
+                mdDown: { display: "none" },
+              })}
+            >
+              <strong className={css({ fontWeight: 600 })}>
+                {account.day.requests ? dollars(account.day.cost_micros) : "—"}
+              </strong>
+              <span className={css({ color: "faint", fontSize: "13px" })}>
+                {account.day.requests === 1
+                  ? "1 request"
+                  : number.format(account.day.requests) + " requests"}
+              </span>
+            </div>
+            <div className={css({ justifySelf: "end" })}>
+              {admin && <AccountMenu account={account} />}
+            </div>
           </div>
         );
       })}
