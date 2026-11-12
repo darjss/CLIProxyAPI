@@ -46,10 +46,20 @@ provider; Pool does not implement a second signup/login flow. Inference routes
 require only a valid Pool API token and do not require a browser session or
 Cloudflare service credentials.
 
-Browser users create a token by naming it. The secret is returned once and only
-a SHA-256 digest is stored. Token names are visible in shared rankings; owner
-emails and request history are private. Members can rename or revoke their own keys.
-Admins can configure daily per-token caps using the administration page.
+Quick Start sets up Claude Code, Codex, OpenCode, or Pi with one command. The
+page creates a single-use code that expires after 10 minutes and shows
+`curl -fsSL https://pool.erxes.tech/setup/<code> | sh`. Fetching that script
+consumes the code, creates a token for the member, and embeds it. The script
+saves the token to `~/.config/pool/token`, backs up each config file it changes,
+and merges in the Pool settings. It needs Python 3. The page then shows the
+token's first request as it arrives. Codes live in memory and are lost on restart.
+
+Members can also create a token by naming it. The secret is returned once and only
+a SHA-256 digest is stored. Rankings show each member's GitHub handle and avatar.
+Access reports the GitHub user ID, and the public GitHub users API resolves it,
+so no GitHub App is needed. Emails and request history stay private. Members
+can rename or revoke their own keys. Admins can configure daily per-token caps
+using the administration page.
 
 Clients use `https://pool.erxes.tech/v1` as the OpenAI-compatible base URL and send:
 
@@ -62,7 +72,7 @@ identifies the owner and named client for usage tracking. Expiry, revocation, an
 daily limits apply without Cloudflare machine credentials. Treat the token as a
 password; anyone holding it can use its allocation.
 
-Admins can connect accounts in **Administration → Upstream accounts → Connect an account**.
+Anyone signed in can share an account from **Quick Start → Share an account**.
 Choose Claude or Codex and click Connect. Claude opens a provider sign-in page;
 after authorizing, paste the full localhost redirect URL into Pool and click
 Finish connection. Codex displays a device code to enter on OpenAI's sign-in page,
@@ -80,8 +90,8 @@ go run ./cmd/server --config pool.example.yaml --codex-device-login
 ```
 
 The member-facing host does not expose the legacy management console or APIs.
-Account login endpoints under `/pool/api/admin/logins` require a verified admin
-identity. Only the admin who starts a login can read it, submit its callback, or
+Account login endpoints under `/pool/api/logins` require a verified Access
+identity. Only the member who starts a login can read it, submit its callback, or
 cancel it. Pending sessions remain in memory and are lost on a server restart.
 
 ## Usage and estimates
@@ -153,7 +163,8 @@ Access requirement, then the catch-all 404 rule. Do not enable Access checks
 globally on the tunnel: that would block token-only inference.
 
 The origin separately verifies Access for dashboard routes, accepts Pool tokens
-on inference routes, and rejects management routes. `/` redirects to `/pool/`.
+on inference routes, serves single-use install scripts under `/setup/`, and
+rejects management routes. `/` redirects to `/pool/`.
 The development identity is never used by the production service.
 
 ```sh

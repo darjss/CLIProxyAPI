@@ -35,7 +35,7 @@ type accountLogin struct {
 	cancel   context.CancelFunc
 }
 
-// AccountLogins keeps pending provider credentials on the server, scoped to an admin.
+// AccountLogins keeps pending provider credentials on the server, scoped to the member who started them.
 type AccountLogins struct {
 	mu       sync.Mutex
 	ctx      context.Context
@@ -55,8 +55,8 @@ func loginPending(status string) bool {
 	return status == "starting" || status == "waiting" || status == "connecting"
 }
 
-func (l *AccountLogins) register(admin *gin.RouterGroup) {
-	admin.POST("/logins", func(c *gin.Context) {
+func (l *AccountLogins) register(group *gin.RouterGroup) {
+	group.POST("/logins", func(c *gin.Context) {
 		var req struct {
 			Provider string `json:"provider"`
 		}
@@ -102,7 +102,7 @@ func (l *AccountLogins) register(admin *gin.RouterGroup) {
 	})
 
 	// Every operation checks ownership, including reads and cancellation.
-	sessions := admin.Group("/logins/:id", func(c *gin.Context) {
+	sessions := group.Group("/logins/:id", func(c *gin.Context) {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		session := l.sessions[c.Param("id")]

@@ -74,7 +74,7 @@ func run() error {
 			log.WithError(errClose).Error("close Pool database")
 		}
 	}()
-	portal := &pool.Portal{Store: store, Dev: *dev}
+	portal := &pool.Portal{Store: store, Dev: *dev, Setups: &pool.Setups{Store: store}}
 	if !*dev {
 		verifier, errVerifier := pool.NewAccessVerifier(*team, *audience, strings.Split(*admins, ","))
 		if errVerifier != nil {

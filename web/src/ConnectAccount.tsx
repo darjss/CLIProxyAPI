@@ -45,7 +45,7 @@ export default function ConnectAccount() {
   const [redirect, setRedirect] = useState("");
   const session = useQuery({
     queryKey: ["account-login", id],
-    queryFn: ({ signal }) => api<Login>("/admin/logins/" + id, { signal }),
+    queryFn: ({ signal }) => api<Login>("/logins/" + id, { signal }),
     enabled: !!id,
     retry: false,
     refetchInterval: (query) =>
@@ -58,7 +58,7 @@ export default function ConnectAccount() {
   };
   const start = useMutation({
     mutationFn: () =>
-      api<Login>("/admin/logins", {
+      api<Login>("/logins", {
         method: "POST",
         body: JSON.stringify({ provider }),
       }),
@@ -66,7 +66,7 @@ export default function ConnectAccount() {
   });
   const finish = useMutation({
     mutationFn: () =>
-      api<Login>(`/admin/logins/${id}/callback`, {
+      api<Login>(`/logins/${id}/callback`, {
         method: "POST",
         body: JSON.stringify({ redirect_url: redirect }),
       }),
@@ -76,7 +76,7 @@ export default function ConnectAccount() {
     },
   });
   const cancel = useMutation({
-    mutationFn: () => api<Login>(`/admin/logins/${id}`, { method: "DELETE" }),
+    mutationFn: () => api<Login>(`/logins/${id}`, { method: "DELETE" }),
     onSuccess: remember,
   });
   const login = session.data;

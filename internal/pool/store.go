@@ -130,11 +130,6 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db, now: time.Now}
-	var version int
-	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("read pool schema version: %w", err)
-	}
 	_, err = db.Exec(`
 CREATE TABLE IF NOT EXISTS owners (
  id TEXT PRIMARY KEY, email TEXT NOT NULL, github_id INTEGER NOT NULL DEFAULT 0,
@@ -163,7 +158,12 @@ CREATE TABLE IF NOT EXISTS quota_snapshots (
  id INTEGER PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL, window TEXT NOT NULL,
  period_seconds INTEGER NOT NULL, remaining REAL NOT NULL, reset_at INTEGER NOT NULL, observed_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);`)
-	if err == nil && version > 0 && version < 3 {
+	// Check the column, not user_version: an older binary rewrites the version on rollback.
+	var profiled int
+	if err == nil {
+		err = db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('owners') WHERE name='login'`).Scan(&profiled)
+	}
+	if err == nil && profiled == 0 {
 		_, err = db.Exec(`
 ALTER TABLE owners ADD COLUMN github_id INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE owners ADD COLUMN login TEXT NOT NULL DEFAULT '';
@@ -451,6 +451,19 @@ func (s *Store) Events(ctx context.Context, owner string, since int64) ([]Event,
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// FirstEvent returns a token's first recorded request, or nil before it makes one.
+func (s *Store) FirstEvent(ctx context.Context, tokenID string) (*Event, error) {
+	var e Event
+	err := s.db.QueryRowContext(ctx, `SELECT e.id,t.name,e.provider,e.model,e.timestamp,e.latency_ms,e.failed,e.tokens,e.cost_micros FROM events e JOIN tokens t ON t.id=e.token_id WHERE e.token_id=? ORDER BY e.timestamp,e.id LIMIT 1`, tokenID).Scan(&e.ID, &e.TokenName, &e.Provider, &e.Model, &e.Timestamp, &e.LatencyMs, &e.Failed, &e.Tokens, &e.CostMicros)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
 }
 
 func (s *Store) Activity(ctx context.Context, owner string, since int64) ([]Day, error) {

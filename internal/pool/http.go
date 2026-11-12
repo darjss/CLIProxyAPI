@@ -29,6 +29,7 @@ type Portal struct {
 	Quota    *Collector
 	Logins   *AccountLogins
 	GitHub   *GitHub
+	Setups   *Setups
 	now      func() time.Time
 }
 
@@ -127,6 +128,11 @@ func (p *Portal) Guard() gin.HandlerFunc {
 				return
 			}
 			c.Set("pool.identity", identity)
+			c.Next()
+			return
+		}
+		// Install scripts are public; the single-use code in the path is the credential.
+		if strings.HasPrefix(path, "/setup/") {
 			c.Next()
 			return
 		}
@@ -286,7 +292,11 @@ func (p *Portal) Register(r *gin.Engine) {
 		c.JSON(http.StatusOK, v)
 	})
 	if p.Logins != nil {
-		p.Logins.register(admin)
+		// Anyone signed in can share an account with the pool; admins only set limits.
+		p.Logins.register(g)
+	}
+	if p.Setups != nil {
+		p.Setups.register(r, g)
 	}
 	admin.POST("/quota/refresh", func(c *gin.Context) {
 		if p.Quota != nil {
