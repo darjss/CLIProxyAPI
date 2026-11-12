@@ -43,7 +43,7 @@ const navigation: NavItem[][] = [
   ],
   [
     { id: "tokens", label: "API Tokens", icon: KeyRound },
-    { id: "usage", label: "My Usage", icon: Activity },
+    { id: "usage", label: "Usage", icon: Activity },
     { id: "leaderboard", label: "Leaderboard", icon: Trophy },
   ],
   [

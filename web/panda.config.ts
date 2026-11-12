@@ -63,6 +63,7 @@ export default defineConfig({
         radii: {
           card: { value: "16px" },
           control: { value: "10px" },
+          full: { value: "9999px" },
         },
       },
       recipes: {

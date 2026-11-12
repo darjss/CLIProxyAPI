@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-export type Period = "today" | "week" | "month" | "all";
+export type Period = "24h" | "7d" | "30d" | "90d";
 export type Metric = "tokens" | "cost";
 export type Person = { login: string; name: string; avatar: string };
 export type Me = {
@@ -27,13 +27,33 @@ export type Aggregate = {
   priced: number;
   cost_micros: number;
 };
-export type Overview = {
-  usage: Aggregate;
-  accounts: Record<string, number>;
-  quota_status: string;
-  since: number;
+export type ClientUsage = {
+  client: string;
+  requests: number;
+  tokens: number;
+  cost_micros: number;
 };
-export type Leader = Aggregate & Person & { id: string; keys: number };
+export type Usage = {
+  requests: number;
+  tokens: number;
+  uncached: number;
+  cache_read: number;
+  cache_write: number;
+  output: number;
+  priced: number;
+  cost_micros: number;
+  cost: {
+    uncached: number;
+    cache_read: number;
+    cache_write: number;
+    output: number;
+  };
+  savings_micros: number;
+  clients: ClientUsage[];
+  days: { date: string; client: string; tokens: number; cost_micros: number }[];
+};
+export type Leader = Aggregate &
+  Person & { id: string; keys: number; clients: ClientUsage[] };
 export type UsageEvent = {
   id: string;
   token_name: string;
@@ -44,8 +64,8 @@ export type UsageEvent = {
   failed: boolean;
   tokens: number;
   cost_micros: number | null;
+  client: string;
 };
-export type Day = { date: string; tokens: number; requests: number };
 export type QuotaPoint = { at: number; remaining: number | null };
 export type QuotaSample = {
   account: string;
@@ -89,15 +109,6 @@ export type Account = {
   status: string;
   disabled: boolean;
 };
-export type Price = {
-  id: number;
-  provider: string;
-  model: string;
-  input: number;
-  output: number;
-  cache_read: number;
-  cache_write: number;
-};
 
 export async function api<T>(
   path: string,
@@ -135,15 +146,14 @@ export const queries = {
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       api<Token[]>("/tokens", { signal }),
   }),
-  overview: (period: Period) => ({
-    queryKey: ["overview", period],
+  usage: (period: Period, owner?: string) => ({
+    queryKey: ["usage", period, owner],
     queryFn: ({ signal }: { signal: AbortSignal }) =>
-      api<Overview>("/overview?period=" + period, { signal }),
-  }),
-  activity: (period: Period) => ({
-    queryKey: ["activity", period],
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      api<Day[]>("/activity?period=" + period, { signal }),
+      api<Usage>(
+        `/usage?period=${period}` +
+          (owner ? "&owner=" + encodeURIComponent(owner) : ""),
+        { signal },
+      ),
   }),
   requests: (period: Period) => ({
     queryKey: ["requests", period],
@@ -183,10 +193,10 @@ export const dateTime = (timestamp: number) =>
     timeStyle: "short",
   }).format(timestamp * 1000);
 export const periodLabels: Record<Period, string> = {
-  today: "Today (UTC)",
-  week: "Last 7 days",
-  month: "This month (UTC)",
-  all: "All time",
+  "24h": "24h",
+  "7d": "7 days",
+  "30d": "30 days",
+  "90d": "90 days",
 };
 export const periodOptions = (Object.keys(periodLabels) as Period[]).map(
   (value) => ({ value, label: periodLabels[value] }),

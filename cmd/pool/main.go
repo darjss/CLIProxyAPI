@@ -97,8 +97,14 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	portal.Logins = pool.NewAccountLogins(ctx, cfg)
+	prices := make(chan struct{})
+	go func() {
+		defer close(prices)
+		store.RunPriceSync(ctx)
+	}()
 	defer func() {
 		cancel()
+		<-prices
 		if portal.Quota != nil {
 			portal.Quota.Wait()
 		}
