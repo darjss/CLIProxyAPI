@@ -175,6 +175,17 @@ served it. Admins use the account's ⋯ menu for two actions:
   `POST /v8/management/routing/cooldown/reset`, so routing tries the account
   again right away. It does not restore provider quota. An account whose
   7-day window is used up stays limited until the provider resets it.
+- **Use free reset.** Anthropic gives some Claude plans free "reset grants",
+  and OpenAI gives Codex "rate-limit reset credits". Each one sets the account's
+  usage back to zero. Pool reads them with each quota check, from the Claude
+  usage endpoint with `cedar_ember=1` and from
+  `chatgpt.com/backend-api/wham/rate-limit-reset-credits`. Accounts shows
+  "N free resets". Spending one posts the claim to
+  `api.anthropic.com/api/organizations/<org>/reset_rate_limits` or
+  `…/rate-limit-reset-credits/consume`, then clears Pool's cooldown for that
+  account. The dashboard warns before using one on an account that still has
+  quota, since that wastes it. The contracts follow
+  router-for-me/Cli-Proxy-API-Management-Center.
 
 The sidebar collapses with Ctrl+B, or Cmd+B on macOS. Someone with no tokens
 lands on Quick Start.
