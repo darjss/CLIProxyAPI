@@ -274,7 +274,10 @@ function TokenLimit({ token, onSaved }: { token: Token; onSaved: () => void }) {
     >
       <div className={css({ minWidth: 0, smDown: { gridColumn: "1 / -1" } })}>
         <strong className={css({ fontWeight: 500 })}>{token.name}</strong>
-        <code className={note}>{token.prefix}…</code>
+        <code className={note}>
+          {token.owner ? "@" + token.owner + " · " : ""}
+          {token.prefix}…
+        </code>
       </div>
       <input
         className={field()}

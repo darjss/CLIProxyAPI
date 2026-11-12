@@ -56,6 +56,9 @@ type accessClaims struct {
 	Type  string `json:"type"`
 }
 
+// IdentityURL returns the endpoint that reports the full identity behind an assertion.
+func (v *AccessVerifier) IdentityURL() string { return v.issuer + "/cdn-cgi/access/get-identity" }
+
 func (v *AccessVerifier) Verify(ctx context.Context, raw string) (Identity, error) {
 	if len(raw) == 0 || len(raw) > 16384 {
 		return Identity{}, errors.New("missing or invalid Access assertion")

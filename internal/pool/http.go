@@ -28,7 +28,36 @@ type Portal struct {
 	Accounts func() []Account
 	Quota    *Collector
 	Logins   *AccountLogins
+	GitHub   *GitHub
 	now      func() time.Time
+}
+
+// withProfile attaches the cached GitHub profile, looking it up at most hourly until found.
+func (p *Portal) withProfile(c *gin.Context, identity Identity, assertion string) Identity {
+	ctx := c.Request.Context()
+	owner, checked, err := p.Store.Owner(ctx, identity.ID)
+	if err == nil && (owner.Login != "" || p.GitHub == nil || p.clock().Unix()-checked < 3600) {
+		identity.Login, identity.Name, identity.Avatar = owner.Login, owner.Name, owner.Avatar
+		return identity
+	}
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		log.WithError(err).Error("pool: read owner profile")
+		return identity
+	}
+	var profile Profile
+	if p.GitHub != nil {
+		if profile, err = p.GitHub.Profile(ctx, assertion); err != nil {
+			log.WithError(err).Warn("pool: GitHub profile lookup failed")
+		}
+	}
+	if err = p.Store.SaveOwner(ctx, identity, profile); err != nil {
+		log.WithError(err).Error("pool: save owner profile")
+	}
+	identity.Login, identity.Name, identity.Avatar = profile.Login, profile.Name, profile.Avatar
+	if profile.Login == "" {
+		identity.Login, identity.Name, identity.Avatar = owner.Login, owner.Name, owner.Avatar
+	}
+	return identity
 }
 
 func (p *Portal) clock() time.Time {
@@ -81,6 +110,7 @@ func (p *Portal) Guard() gin.HandlerFunc {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "a human Access login is required"})
 				return
 			}
+			identity = p.withProfile(c, identity, c.GetHeader("Cf-Access-Jwt-Assertion"))
 			if origin := c.GetHeader("Origin"); origin != "" {
 				u, err := url.Parse(origin)
 				scheme := "https"

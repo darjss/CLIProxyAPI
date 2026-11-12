@@ -30,6 +30,10 @@ type Identity struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Admin bool   `json:"admin"`
+	// Public GitHub profile, cached on the owner row.
+	Login  string `json:"login"`
+	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
 }
 
 type Token struct {
@@ -40,6 +44,7 @@ type Token struct {
 	ExpiresAt  int64  `json:"expires_at"`
 	RevokedAt  int64  `json:"revoked_at"`
 	DailyLimit int64  `json:"daily_limit"`
+	Owner      string `json:"owner"`
 	OwnerID    string `json:"-"`
 }
 
@@ -65,8 +70,11 @@ type Aggregate struct {
 }
 
 type Leader struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID     string `json:"id"`
+	Login  string `json:"login"`
+	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
+	Keys   int64  `json:"keys"`
 	Aggregate
 }
 
@@ -122,8 +130,16 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db, now: time.Now}
+	var version int
+	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("read pool schema version: %w", err)
+	}
 	_, err = db.Exec(`
-CREATE TABLE IF NOT EXISTS owners (id TEXT PRIMARY KEY, email TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS owners (
+ id TEXT PRIMARY KEY, email TEXT NOT NULL, github_id INTEGER NOT NULL DEFAULT 0,
+ login TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '',
+ checked_at INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS tokens (
  id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES owners(id), name TEXT NOT NULL,
  digest TEXT NOT NULL UNIQUE, prefix TEXT NOT NULL, created_at INTEGER NOT NULL,
@@ -146,13 +162,45 @@ CREATE TABLE IF NOT EXISTS quota_accounts (
 CREATE TABLE IF NOT EXISTS quota_snapshots (
  id INTEGER PRIMARY KEY, account_id TEXT NOT NULL, provider TEXT NOT NULL, window TEXT NOT NULL,
  period_seconds INTEGER NOT NULL, remaining REAL NOT NULL, reset_at INTEGER NOT NULL, observed_at INTEGER NOT NULL);
-CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);
-PRAGMA user_version=2;`)
+CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);`)
+	if err == nil && version > 0 && version < 3 {
+		_, err = db.Exec(`
+ALTER TABLE owners ADD COLUMN github_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE owners ADD COLUMN login TEXT NOT NULL DEFAULT '';
+ALTER TABLE owners ADD COLUMN name TEXT NOT NULL DEFAULT '';
+ALTER TABLE owners ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
+ALTER TABLE owners ADD COLUMN checked_at INTEGER NOT NULL DEFAULT 0;`)
+	}
+	if err == nil {
+		_, err = db.Exec(`PRAGMA user_version=3`)
+	}
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize pool schema: %w", err)
 	}
 	return s, nil
+}
+
+// Owner returns the cached profile for an identity and when it was last looked up.
+func (s *Store) Owner(ctx context.Context, id string) (Identity, int64, error) {
+	var o Identity
+	var checked int64
+	err := s.db.QueryRowContext(ctx, `SELECT id,email,login,name,avatar,checked_at FROM owners WHERE id=?`, id).Scan(&o.ID, &o.Email, &o.Login, &o.Name, &o.Avatar, &checked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return o, 0, ErrNotFound
+	}
+	return o, checked, err
+}
+
+// SaveOwner records a lookup attempt; an empty profile keeps any previous login.
+func (s *Store) SaveOwner(ctx context.Context, owner Identity, p Profile) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO owners(id,email,github_id,login,name,avatar,checked_at) VALUES(?,?,?,?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET email=excluded.email,checked_at=excluded.checked_at,
+ github_id=CASE WHEN excluded.login='' THEN github_id ELSE excluded.github_id END,
+ login=CASE WHEN excluded.login='' THEN login ELSE excluded.login END,
+ name=CASE WHEN excluded.login='' THEN name ELSE excluded.name END,
+ avatar=CASE WHEN excluded.login='' THEN avatar ELSE excluded.avatar END`, owner.ID, owner.Email, p.ID, p.Login, p.Name, p.Avatar, s.now().Unix())
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -194,11 +242,11 @@ func (s *Store) CreateToken(ctx context.Context, owner Identity, name string, ex
 	return t, secret, nil
 }
 
-const tokenColumns = `id,owner_id,name,prefix,created_at,expires_at,revoked_at,daily_limit`
+const tokenColumns = `id,owner_id,name,prefix,created_at,expires_at,revoked_at,daily_limit,COALESCE((SELECT login FROM owners WHERE owners.id=tokens.owner_id),'')`
 
 func scanToken(row interface{ Scan(...any) error }) (Token, error) {
 	var t Token
-	err := row.Scan(&t.ID, &t.OwnerID, &t.Name, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.DailyLimit)
+	err := row.Scan(&t.ID, &t.OwnerID, &t.Name, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.DailyLimit, &t.Owner)
 	return t, err
 }
 
@@ -370,7 +418,7 @@ func (s *Store) Leaders(ctx context.Context, since int64, metric string) ([]Lead
 	if metric == "cost" {
 		order = "total_cost"
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT t.id,t.name,`+aggregateSQL+` FROM events e JOIN tokens t ON t.id=e.token_id WHERE e.timestamp>=? GROUP BY t.id ORDER BY `+order+` DESC,t.id LIMIT 100`, since)
+	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.login,CASE WHEN o.login='' THEN MIN(t.name) ELSE o.name END,o.avatar,COUNT(DISTINCT t.id),`+aggregateSQL+` FROM events e JOIN tokens t ON t.id=e.token_id JOIN owners o ON o.id=t.owner_id WHERE e.timestamp>=? GROUP BY o.id ORDER BY `+order+` DESC,o.id LIMIT 100`, since)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +426,7 @@ func (s *Store) Leaders(ctx context.Context, since int64, metric string) ([]Lead
 	out := []Leader{}
 	for rows.Next() {
 		var l Leader
-		err = rows.Scan(&l.ID, &l.Name, &l.Requests, &l.Tokens, &l.Input, &l.Output, &l.Cached, &l.Failures, &l.Priced, &l.CostMicros)
+		err = rows.Scan(&l.ID, &l.Login, &l.Name, &l.Avatar, &l.Keys, &l.Requests, &l.Tokens, &l.Input, &l.Output, &l.Cached, &l.Failures, &l.Priced, &l.CostMicros)
 		if err != nil {
 			return nil, err
 		}

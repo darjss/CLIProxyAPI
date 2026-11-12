@@ -14,6 +14,7 @@ import {
   ErrorState,
   Loading,
   PageHeader,
+  Person,
   Segmented,
   card,
   note,
@@ -21,6 +22,11 @@ import {
   table,
   tableScroll,
 } from "../ui";
+
+const percent = new Intl.NumberFormat("en", {
+  style: "percent",
+  maximumFractionDigits: 1,
+});
 
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState<Period>("week");
@@ -31,10 +37,16 @@ export default function LeaderboardPage() {
 
   return (
     <>
-      <PageHeader
-        title="Leaderboard"
-        meta="Ranked by named token · personal requests stay private"
-      >
+      <PageHeader title="Leaderboard">
+        <Segmented
+          label="Rank by"
+          value={metric}
+          onChange={setMetric}
+          options={[
+            { value: "tokens", label: "Tokens" },
+            { value: "cost", label: "Cost" },
+          ]}
+        />
         <Segmented
           label="Leaderboard period"
           value={period}
@@ -42,37 +54,6 @@ export default function LeaderboardPage() {
           options={periodOptions}
         />
       </PageHeader>
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          gap: "16px",
-          flexWrap: "wrap",
-          mb: "20px",
-        })}
-      >
-        <Segmented
-          label="Rank by"
-          value={metric}
-          onChange={setMetric}
-          options={[
-            { value: "tokens", label: "Total tokens" },
-            { value: "cost", label: "Est. API cost" },
-          ]}
-        />
-        <span className={css({ color: "dim", fontSize: "15px" })}>
-          Top 100 ·{" "}
-          {metric === "tokens"
-            ? "canonical token totals"
-            : "configured token rates"}
-        </span>
-      </div>
-      {metric === "cost" && (
-        <p className={css({ color: "dim", fontSize: "14px", mb: "20px" })}>
-          API-equivalent estimates, not subscription spending. Missing prices
-          are excluded from the cost total; coverage shows what was priced.
-        </p>
-      )}
       {leaders.isError ? (
         <ErrorState
           error={leaders.error}
@@ -83,8 +64,8 @@ export default function LeaderboardPage() {
       ) : !leaders.data.length ? (
         <div className={card}>
           <EmptyState
-            title="An open field."
-            description="Named tokens appear here after their first reported execution."
+            title="No usage in this period."
+            description="People show up here after their first request."
           />
         </div>
       ) : (
@@ -92,17 +73,14 @@ export default function LeaderboardPage() {
           <table className={table}>
             <thead>
               <tr>
-                <th>Rank</th>
-                <th>Token name</th>
+                <th>#</th>
+                <th>Person</th>
                 <th className={css({ width: "32%" })}>
-                  {metric === "tokens" ? "Total tokens" : "Est. API cost"}
+                  {metric === "tokens" ? "Tokens" : "Est. cost"}
                 </th>
                 <th>Input / output</th>
-                <th>Cache reads</th>
-                <th>
-                  {metric === "tokens" ? "Est. API cost" : "Total tokens"}
-                </th>
-                <th>Coverage</th>
+                <th>Cache hit</th>
+                <th>{metric === "tokens" ? "Est. cost" : "Tokens"}</th>
               </tr>
             </thead>
             <tbody>
@@ -123,10 +101,10 @@ export default function LeaderboardPage() {
                       </span>
                     </td>
                     <td className={primaryCell}>
-                      {leader.name}
+                      <Person person={leader} />
                       <span className={note}>
-                        {leader.id.slice(-6)} · {number.format(leader.requests)}{" "}
-                        executions
+                        {number.format(leader.requests)} requests ·{" "}
+                        {leader.keys} {leader.keys === 1 ? "token" : "tokens"}
                       </span>
                     </td>
                     <td>
@@ -148,7 +126,7 @@ export default function LeaderboardPage() {
                             ? number.format(leader.tokens)
                             : leader.priced
                               ? dollars(leader.cost_micros)
-                              : "Unpriced"}
+                              : "—"}
                         </strong>
                         <div
                           className={css({
@@ -177,16 +155,17 @@ export default function LeaderboardPage() {
                       {number.format(leader.input)} /{" "}
                       {number.format(leader.output)}
                     </td>
-                    <td>{number.format(leader.cached)}</td>
+                    <td>
+                      {leader.input
+                        ? percent.format(leader.cached / leader.input)
+                        : "—"}
+                    </td>
                     <td>
                       {metric === "tokens"
                         ? leader.priced
                           ? dollars(leader.cost_micros)
-                          : "Unpriced"
+                          : "—"
                         : number.format(leader.tokens)}
-                    </td>
-                    <td>
-                      {leader.priced}/{leader.requests}
                     </td>
                   </tr>
                 );

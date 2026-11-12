@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 export type Period = "today" | "week" | "month" | "all";
 export type Metric = "tokens" | "cost";
+export type Person = { login: string; name: string; avatar: string };
 export type Me = {
-  identity: { id: string; email: string; admin: boolean };
+  identity: Person & { id: string; email: string; admin: boolean };
   development: boolean;
 };
 export type Token = {
@@ -14,6 +15,7 @@ export type Token = {
   expires_at: number;
   revoked_at: number;
   daily_limit: number;
+  owner: string;
 };
 export type Aggregate = {
   requests: number;
@@ -31,7 +33,7 @@ export type Overview = {
   quota_status: string;
   since: number;
 };
-export type Leader = Aggregate & { id: string; name: string };
+export type Leader = Aggregate & Person & { id: string; keys: number };
 export type UsageEvent = {
   id: string;
   token_name: string;
