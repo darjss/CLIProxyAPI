@@ -10,10 +10,12 @@ import {
   ErrorState,
   Loading,
   PageHeader,
+  ProviderIcon,
   Segmented,
   caption,
   card,
   formError,
+  palette,
 } from "../ui";
 
 type ConfigFile = {
@@ -50,7 +52,6 @@ const modelLabels: Record<string, string> = {
 export default function SetupPage() {
   const [path, setPath] = useState<"use" | "share">("use");
   const [tool, setTool] = useState<HarnessID>("claude");
-  const [models, setModels] = useState<Partial<Record<HarnessID, string>>>({});
   const harnesses = useQuery({
     queryKey: ["harnesses"],
     queryFn: ({ signal }) =>
@@ -67,7 +68,7 @@ export default function SetupPage() {
     );
   if (harnesses.isPending) return <Loading />;
   const harness = harnesses.data[tool];
-  const model = models[tool] ?? harness.models[0];
+  const model = harness.models[0];
 
   return (
     <>
@@ -109,19 +110,19 @@ export default function SetupPage() {
               onChange={setTool}
               options={harnessOrder.map((id) => ({
                 value: id,
-                label: harnesses.data[id].label,
-              }))}
-            />
-            <Segmented
-              label="Model"
-              value={model}
-              onChange={(value) => setModels({ ...models, [tool]: value })}
-              options={harness.models.map((id) => ({
-                value: id,
-                label: modelLabels[id] ?? id,
+                label: (
+                  <>
+                    <ProviderIcon provider={id} size={16} />
+                    {harnesses.data[id].label}
+                  </>
+                ),
               }))}
             />
           </div>
+          <p className={caption}>
+            Uses <code>{modelLabels[model] ?? model}</code> by default. Switch
+            models any time inside {harness.label}.
+          </p>
         </Step>
         <Install
           key={tool + model}
@@ -250,14 +251,36 @@ function Progress({
       )}
     >
       {done ? (
-        <Check size={16} className={css({ color: "ok" })} />
+        <span
+          className={css({
+            display: "grid",
+            placeItems: "center",
+            width: "20px",
+            height: "20px",
+            borderRadius: "full",
+            background: "ok",
+            color: "canvas",
+          })}
+        >
+          <Check size={13} strokeWidth={3} />
+        </span>
       ) : active ? (
         <LoaderCircle
-          size={16}
-          className={css({ animation: "spin 0.9s linear infinite" })}
+          size={20}
+          className={css({
+            color: "focus",
+            animation: "spin 0.9s linear infinite",
+          })}
         />
       ) : (
-        <span className={css({ width: "16px" })} />
+        <span
+          className={css({
+            width: "20px",
+            height: "20px",
+            borderRadius: "full",
+            border: "2px solid token(colors.active)",
+          })}
+        />
       )}
       <span>{children}</span>
     </p>
@@ -333,6 +356,8 @@ function OtherWays({ harness, model }: { harness: Harness; model: string }) {
   );
 }
 
+const stepColors = [palette.claude, palette.blue, palette.violet, palette.ok];
+
 function Step({
   number,
   title,
@@ -362,10 +387,13 @@ function Step({
           width: "32px",
           height: "32px",
           borderRadius: "9px",
-          background: "raised",
-          fontWeight: 600,
+          fontWeight: 700,
           fontVariantNumeric: "tabular-nums",
         })}
+        style={{
+          color: stepColors[number],
+          background: `color-mix(in srgb, ${stepColors[number]} 16%, transparent)`,
+        }}
       >
         {number || "+"}
       </span>

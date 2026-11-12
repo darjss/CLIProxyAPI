@@ -1,53 +1,42 @@
-import { Fragment, useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { css, cx } from "../../styled-system/css";
 import {
+  dollars,
   number,
   periodOptions,
   queries,
   type Leader,
-  type Metric,
   type Period,
 } from "../api";
-import { UsageView, amount, clients } from "../UsageView";
-import { metricOptions } from "./UsagePage";
+import { UsageView } from "../UsageView";
 import {
   EmptyState,
   ErrorState,
   Loading,
+  Modal,
   PageHeader,
   Person,
   Segmented,
   card,
-  note,
-  primaryCell,
-  table,
-  tableScroll,
 } from "../ui";
 
 const percent = new Intl.NumberFormat("en", {
   style: "percent",
   maximumFractionDigits: 1,
 });
+// Gold, silver, bronze.
+const medals = ["#f2c14e", "#c9d1dc", "#d08a5a"];
+const cacheHit = (l: Leader) => (l.input ? l.cached / l.input : 0);
 
 export default function LeaderboardPage() {
   const [period, setPeriod] = useState<Period>("7d");
-  const [metric, setMetric] = useState<Metric>("cost");
-  const [open, setOpen] = useState<string | null>(null);
-  const leaders = useQuery(queries.leaders(period, metric));
-  const value = (l: Leader) => (metric === "cost" ? l.cost_micros : l.tokens);
-  const max = leaders.data?.[0] ? value(leaders.data[0]) : 0;
+  const [open, setOpen] = useState<Leader | null>(null);
+  const leaders = useQuery(queries.leaders(period, "cost"));
 
   return (
     <>
       <PageHeader title="Leaderboard">
-        <Segmented
-          label="Rank by"
-          value={metric}
-          onChange={setMetric}
-          options={metricOptions}
-        />
         <Segmented
           label="Leaderboard period"
           value={period}
@@ -65,173 +54,161 @@ export default function LeaderboardPage() {
       ) : !leaders.data.length ? (
         <div className={card}>
           <EmptyState
-            title="No usage in this period."
+            title="Nobody on the board yet."
             description="People show up here after their first request."
           />
         </div>
       ) : (
-        <div className={cx(card, tableScroll)}>
-          <table className={table}>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Person</th>
-                <th className={css({ width: "30%" })}>
-                  {metric === "cost" ? "Est. cost" : "Tokens"}
-                </th>
-                <th>Tools</th>
-                <th>Cache hit</th>
-                <th>{metric === "cost" ? "Tokens" : "Est. cost"}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaders.data.map((leader, index) => {
-                const expanded = open === leader.id;
-                return (
-                  <Fragment key={leader.id}>
-                    <tr
-                      onClick={() => setOpen(expanded ? null : leader.id)}
-                      aria-expanded={expanded}
-                      className={css({
-                        cursor: "pointer",
-                        _hover: { "& td": { background: "raised" } },
-                      })}
-                    >
-                      <td
-                        className={css({
-                          fontFamily: "mono",
-                          color: index < 3 ? "warn" : "faint",
-                        })}
-                      >
-                        {index + 1}
-                      </td>
-                      <td className={primaryCell}>
-                        <span
-                          className={css({
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                          })}
-                        >
-                          {expanded ? (
-                            <ChevronDown size={14} />
-                          ) : (
-                            <ChevronRight size={14} />
-                          )}
-                          <Person person={leader} />
-                        </span>
-                        <span className={note}>
-                          {number.format(leader.requests)} requests ·{" "}
-                          {leader.keys} {leader.keys === 1 ? "token" : "tokens"}
-                        </span>
-                      </td>
-                      <td>
-                        <div
-                          className={css({
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "14px",
-                          })}
-                        >
-                          <strong
-                            className={css({
-                              fontWeight: 600,
-                              minWidth: "72px",
-                              fontVariantNumeric: "tabular-nums",
-                            })}
-                          >
-                            {amount(metric, value(leader))}
-                          </strong>
-                          <div
-                            className={css({
-                              flex: 1,
-                              minWidth: "80px",
-                              height: "4px",
-                              borderRadius: "full",
-                              background: "active",
-                              overflow: "hidden",
-                            })}
-                          >
-                            <div
-                              className={css({
-                                height: "100%",
-                                borderRadius: "full",
-                                background: "#b9c3ff",
-                              })}
-                              style={{
-                                width: max
-                                  ? (value(leader) / max) * 100 + "%"
-                                  : 0,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <div
-                          title={leader.clients
-                            .map(
-                              (c) =>
-                                `${(clients[c.client] ?? clients.other).label} ${number.format(c.tokens)}`,
-                            )
-                            .join(" · ")}
-                          className={css({
-                            display: "flex",
-                            gap: "2px",
-                            width: "96px",
-                            height: "6px",
-                          })}
-                        >
-                          {leader.clients.map((c) => (
-                            <span
-                              key={c.client}
-                              className={css({ borderRadius: "full" })}
-                              style={{
-                                flex: c.tokens || 1,
-                                background: (clients[c.client] ?? clients.other)
-                                  .color,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </td>
-                      <td>
-                        {leader.input
-                          ? percent.format(leader.cached / leader.input)
-                          : "—"}
-                      </td>
-                      <td>
-                        {amount(
-                          metric === "cost" ? "tokens" : "cost",
-                          metric === "cost"
-                            ? leader.tokens
-                            : leader.cost_micros,
-                        )}
-                      </td>
-                    </tr>
-                    {expanded && (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className={css({
-                            padding: "24px 8px 32px !important",
-                          })}
-                        >
-                          <UsageView
-                            period={period}
-                            metric={metric}
-                            owner={leader.id}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Board leaders={leaders.data} onOpen={setOpen} />
+      )}
+      {open && (
+        <Modal
+          wide
+          title={<Person person={open} size={28} />}
+          onClose={() => setOpen(null)}
+        >
+          <UsageView period={period} metric="cost" owner={open.id} />
+        </Modal>
       )}
     </>
+  );
+}
+
+function Board({
+  leaders,
+  onOpen,
+}: {
+  leaders: Leader[];
+  onOpen: (l: Leader) => void;
+}) {
+  const pool = leaders.reduce((sum, l) => sum + l.cost_micros, 0);
+  const share = (l: Leader) => (pool ? l.cost_micros / pool : 0);
+
+  return (
+    <div className={css({ display: "grid", gap: "20px" })}>
+      <div
+        className={css({
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          alignItems: "end",
+          gap: "16px",
+          mdDown: { gridTemplateColumns: "minmax(0, 1fr)" },
+        })}
+      >
+        {[1, 0, 2].map((rank) => {
+          const l = leaders[rank];
+          if (!l)
+            return (
+              <div
+                key={rank}
+                className={css({ mdDown: { display: "none" } })}
+              />
+            );
+          return (
+            <button
+              key={l.id}
+              onClick={() => onOpen(l)}
+              className={cx(
+                card,
+                css({
+                  display: "grid",
+                  justifyItems: "center",
+                  gap: "10px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  borderTop: "3px solid var(--medal)",
+                  transition: "transform 0.15s, background 0.15s",
+                  _hover: {
+                    background: "raised",
+                    transform: "translateY(-2px)",
+                  },
+                  mdDown: { order: rank },
+                }),
+              )}
+              style={
+                {
+                  "--medal": medals[rank],
+                  paddingBlock: rank === 0 ? "36px" : "24px",
+                  background: `linear-gradient(180deg, color-mix(in srgb, ${medals[rank]} 10%, transparent), transparent 70%)`,
+                } as CSSProperties
+              }
+            >
+              <span
+                className={css({
+                  display: "grid",
+                  placeItems: "center",
+                  width: "30px",
+                  height: "30px",
+                  borderRadius: "full",
+                  fontWeight: 700,
+                  color: "canvas",
+                })}
+                style={{ background: medals[rank] }}
+              >
+                {rank + 1}
+              </span>
+              <span className={css({ fontSize: "17px", fontWeight: 600 })}>
+                <Person person={l} size={rank === 0 ? 44 : 36} />
+              </span>
+              <strong
+                className={css({
+                  fontSize: rank === 0 ? "38px" : "30px",
+                  fontWeight: 650,
+                  letterSpacing: "-0.03em",
+                  fontVariantNumeric: "tabular-nums",
+                })}
+              >
+                {dollars(l.cost_micros)}
+              </strong>
+              <span className={css({ color: "dim", fontSize: "14px" })}>
+                {percent.format(share(l))} of the pool ·{" "}
+                {number.format(l.tokens)} tokens
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {leaders.length > 3 && (
+        <div className={cx(card, css({ padding: "8px 12px" }))}>
+          {leaders.slice(3).map((l, i) => (
+            <button
+              key={l.id}
+              onClick={() => onOpen(l)}
+              className={css({
+                display: "grid",
+                gridTemplateColumns: "32px minmax(0, 1fr) auto auto",
+                alignItems: "center",
+                gap: "16px",
+                width: "100%",
+                padding: "12px",
+                borderRadius: "10px",
+                textAlign: "left",
+                cursor: "pointer",
+                _hover: { background: "raised" },
+              })}
+            >
+              <span className={css({ fontFamily: "mono", color: "faint" })}>
+                {i + 4}
+              </span>
+              <Person person={l} />
+              <span
+                className={css({
+                  color: "dim",
+                  fontSize: "14px",
+                  smDown: { display: "none" },
+                })}
+              >
+                {number.format(l.tokens)} tokens · {percent.format(cacheHit(l))}{" "}
+                cache
+              </span>
+              <strong className={css({ fontVariantNumeric: "tabular-nums" })}>
+                {dollars(l.cost_micros)}
+              </strong>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

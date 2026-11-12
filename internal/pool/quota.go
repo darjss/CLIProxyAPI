@@ -39,6 +39,12 @@ type QuotaAccount struct {
 	Status    string        `json:"status"`
 	CheckedAt int64         `json:"checked_at"`
 	Samples   []QuotaSample `json:"windows"`
+	// Filled by the portal from the auth manager and the last 24 hours of events.
+	Email      string          `json:"email"`
+	Disabled   bool            `json:"disabled"`
+	AuthStatus string          `json:"auth_status"`
+	Message    string          `json:"message"`
+	Day        AccountActivity `json:"day"`
 }
 
 type QuotaPool struct {

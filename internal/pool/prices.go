@@ -89,6 +89,24 @@ WHERE price_id IS NULL AND json_extract(breakdown,'$.quality')='complete'
 	return nil
 }
 
+// LatestPrices returns the current rate per "provider/model".
+func (s *Store) LatestPrices(ctx context.Context) (map[string]Price, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,provider,model,input,output,cache_read,cache_write FROM prices WHERE id IN (SELECT MAX(id) FROM prices GROUP BY provider,model)`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]Price{}
+	for rows.Next() {
+		var p Price
+		if err = rows.Scan(&p.ID, &p.Provider, &p.Model, &p.Input, &p.Output, &p.CacheRead, &p.CacheWrite); err != nil {
+			return nil, err
+		}
+		out[p.Provider+"/"+p.Model] = p
+	}
+	return out, rows.Err()
+}
+
 // RunPriceSync refreshes prices now and then daily until ctx ends.
 func (s *Store) RunPriceSync(ctx context.Context) {
 	client := &http.Client{Timeout: time.Minute}

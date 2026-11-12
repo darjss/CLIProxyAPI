@@ -18,12 +18,12 @@ import {
   type Period,
   type Usage,
 } from "./api";
-import { EmptyState, ErrorState, Loading } from "./ui";
+import { EmptyState, ErrorState, Loading, palette } from "./ui";
 
 export const clients: Record<string, { label: string; color: string }> = {
-  "claude-code": { label: "Claude Code", color: "#e8835f" },
-  codex: { label: "Codex", color: "#7d9ef5" },
-  other: { label: "Other", color: "#9b9ba1" },
+  "claude-code": { label: "Claude Code", color: palette.claude },
+  codex: { label: "Codex", color: palette.codex },
+  other: { label: "Other", color: palette.violet },
 };
 const client = (id: string) => clients[id] ?? clients.other;
 const periodDays: Record<Period, number> = {
@@ -163,12 +163,18 @@ export function UsageView({
         })}
       >
         <Figure label="Processed tokens">{number.format(u.tokens)}</Figure>
-        <Figure label="Cached input">{number.format(u.cache_read)}</Figure>
-        <Figure label="Uncached input">
+        <Figure label="Cached input" color={palette.teal}>
+          {number.format(u.cache_read)}
+        </Figure>
+        <Figure label="Uncached input" color={palette.blue}>
           {number.format(u.uncached + u.cache_write)}
         </Figure>
-        <Figure label="Output">{number.format(u.output)}</Figure>
-        <Figure label="Cache savings">{dollars(u.savings_micros)}</Figure>
+        <Figure label="Output" color={palette.pink}>
+          {number.format(u.output)}
+        </Figure>
+        <Figure label="Cache savings" color={palette.ok}>
+          {dollars(u.savings_micros)}
+        </Figure>
       </div>
 
       <TypeBar usage={u} metric={metric} />
@@ -178,9 +184,11 @@ export function UsageView({
 
 function Figure({
   label: text,
+  color,
   children,
 }: {
   label: string;
+  color?: string;
   children: ReactNode;
 }) {
   return (
@@ -192,6 +200,7 @@ function Figure({
           fontWeight: 500,
           fontVariantNumeric: "tabular-nums",
         })}
+        style={{ color }}
       >
         {children}
       </strong>
@@ -331,25 +340,25 @@ function TypeBar({ usage, metric }: { usage: Usage; metric: Metric }) {
   const parts = [
     {
       label: "Input",
-      color: "#5c5c63",
+      color: palette.blue,
       tokens: usage.uncached,
       cost: usage.cost.uncached,
     },
     {
       label: "Cache read",
-      color: "#7a7a82",
+      color: palette.teal,
       tokens: usage.cache_read,
       cost: usage.cost.cache_read,
     },
     {
       label: "Cache write",
-      color: "#b4b4ba",
+      color: palette.warn,
       tokens: usage.cache_write,
       cost: usage.cost.cache_write,
     },
     {
       label: "Output",
-      color: "#ececef",
+      color: palette.pink,
       tokens: usage.output,
       cost: usage.cost.output,
     },

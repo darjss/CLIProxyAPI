@@ -96,7 +96,7 @@ export function Segmented<T extends string>({
 }: {
   label: string;
   value: T;
-  options: Option<T>[];
+  options: readonly Option<T>[];
   onChange: (value: T) => void;
   plain?: boolean;
   panel?: string;
@@ -362,14 +362,66 @@ export function CodeBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Raw palette for charts and tinted chips; matches the Panda color tokens. */
+export const palette = {
+  claude: "#e8835f",
+  codex: "#7d9ef5",
+  blue: "#8aa4ff",
+  violet: "#b48cff",
+  teal: "#4fc1b5",
+  pink: "#f07ab3",
+  ok: "#4fbf7f",
+  warn: "#e0b34f",
+  bad: "#ef6b63",
+  gray: "#9b9ba1",
+};
+
+export const tiers = [
+  { value: "light", label: "Light", color: palette.teal },
+  { value: "standard", label: "Standard", color: palette.blue },
+  { value: "unlimited", label: "Unlimited", color: palette.violet },
+] as const;
+
+/** A small status label tinted with one palette color. */
+export function Chip({
+  color,
+  children,
+}: {
+  color: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      className={css({
+        display: "inline-flex",
+        alignItems: "center",
+        height: "24px",
+        paddingInline: "9px",
+        borderRadius: "full",
+        fontSize: "13px",
+        fontWeight: 500,
+        whiteSpace: "nowrap",
+      })}
+      style={{
+        color,
+        background: `color-mix(in srgb, ${color} 16%, transparent)`,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function Modal({
   title,
   children,
   onClose,
+  wide,
 }: {
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   onClose: () => void;
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -393,7 +445,10 @@ export function Modal({
       }}
       className={css({
         margin: "auto",
-        width: "min(480px, calc(100vw - 32px))",
+        width: wide
+          ? "min(1100px, calc(100vw - 32px))"
+          : "min(480px, calc(100vw - 32px))",
+        maxHeight: "calc(100vh - 48px)",
         padding: "24px",
         borderRadius: "card",
         background: "card",

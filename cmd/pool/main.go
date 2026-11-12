@@ -12,17 +12,20 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pool"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	_ "github.com/router-for-me/CLIProxyAPI/v8/internal/translator"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
 	log "github.com/sirupsen/logrus"
@@ -117,9 +120,37 @@ func run() error {
 			portal.Accounts = func() []pool.Account {
 				out := []pool.Account{}
 				for _, a := range base.AuthManager.List() {
-					out = append(out, pool.Account{ID: a.ID, Provider: a.Provider, Status: string(a.Status), Disabled: a.Disabled})
+					email, _ := a.Metadata["email"].(string)
+					if email == "" {
+						email = a.Attributes["email"]
+					}
+					var models []string
+					for _, m := range registry.GetGlobalRegistry().GetModelsForClient(a.ID) {
+						models = append(models, m.ID)
+					}
+					out = append(out, pool.Account{ID: a.ID, Provider: a.Provider, Status: string(a.Status), Disabled: a.Disabled, Email: email, Message: a.StatusMessage, Models: models})
 				}
 				return out
+			}
+			// Same state change as the management API's auth-file status toggle.
+			portal.SetDisabled = func(ctx context.Context, id string, disabled bool) error {
+				current, ok := base.AuthManager.GetByID(id)
+				if !ok {
+					return pool.ErrNotFound
+				}
+				_, committed, err := base.AuthManager.Modify(ctx, id, current.RegistrationEpoch, func(a *coreauth.Auth) error {
+					a.Disabled = disabled
+					a.Status, a.StatusMessage = coreauth.StatusActive, ""
+					if disabled {
+						a.Status, a.StatusMessage = coreauth.StatusDisabled, "disabled in Pool"
+					}
+					a.UpdatedAt = time.Now()
+					return nil
+				})
+				if err == nil && !committed {
+					err = pool.ErrNotFound
+				}
+				return err
 			}
 			portal.Register(r)
 			r.GET("/pool/", func(c *gin.Context) {

@@ -3,9 +3,24 @@ import { useQuery } from "@tanstack/react-query";
 export type Period = "24h" | "7d" | "30d" | "90d";
 export type Metric = "tokens" | "cost";
 export type Person = { login: string; name: string; avatar: string };
+export type Tier = "light" | "standard" | "unlimited";
 export type Me = {
   identity: Person & { id: string; email: string; admin: boolean };
   development: boolean;
+  // Fractions of the tier's daily and weekly cap; absent when uncapped.
+  limit?: { tier: Tier; day?: number; week?: number };
+};
+export type Member = Person & { id: string; tier: Tier; tokens: number };
+export type PoolModel = {
+  id: string;
+  provider: string;
+  accounts: string[];
+  price: {
+    input: number;
+    output: number;
+    cache_read: number;
+    cache_write: number;
+  } | null;
 };
 export type Token = {
   id: string;
@@ -14,7 +29,6 @@ export type Token = {
   created_at: number;
   expires_at: number;
   revoked_at: number;
-  daily_limit: number;
   owner: string;
 };
 export type Aggregate = {
@@ -82,6 +96,11 @@ export type QuotaAccount = {
   status: string;
   checked_at: number;
   windows: QuotaSample[];
+  email: string;
+  disabled: boolean;
+  auth_status: string;
+  message: string;
+  day: { requests: number; cost_micros: number; last_used: number };
 };
 export type QuotaPool = {
   id: string;
@@ -102,12 +121,6 @@ export type QuotaSnapshot = {
   pools: QuotaPool[];
   accounts: QuotaAccount[];
   observed_at: number;
-};
-export type Account = {
-  id: string;
-  provider: string;
-  status: string;
-  disabled: boolean;
 };
 
 export async function api<T>(

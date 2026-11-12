@@ -37,15 +37,14 @@ type Identity struct {
 }
 
 type Token struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Prefix     string `json:"prefix"`
-	CreatedAt  int64  `json:"created_at"`
-	ExpiresAt  int64  `json:"expires_at"`
-	RevokedAt  int64  `json:"revoked_at"`
-	DailyLimit int64  `json:"daily_limit"`
-	Owner      string `json:"owner"`
-	OwnerID    string `json:"-"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Prefix    string `json:"prefix"`
+	CreatedAt int64  `json:"created_at"`
+	ExpiresAt int64  `json:"expires_at"`
+	RevokedAt int64  `json:"revoked_at"`
+	Owner     string `json:"owner"`
+	OwnerID   string `json:"-"`
 }
 
 type Price struct {
@@ -196,6 +195,8 @@ CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);`
 		{"owners", "avatar", "TEXT NOT NULL DEFAULT ''"},
 		{"owners", "checked_at", "INTEGER NOT NULL DEFAULT 0"},
 		{"events", "client", "TEXT NOT NULL DEFAULT ''"},
+		{"events", "account", "TEXT NOT NULL DEFAULT ''"},
+		{"owners", "tier", "TEXT NOT NULL DEFAULT 'standard'"},
 	} {
 		var exists int
 		if err == nil {
@@ -203,10 +204,14 @@ CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);`
 		}
 		if err == nil && exists == 0 {
 			_, err = db.Exec(`ALTER TABLE ` + c[0] + ` ADD COLUMN ` + c[1] + ` ` + c[2])
+			// New members start on Standard; people already using the pool keep no cap until an admin picks one.
+			if err == nil && c[1] == "tier" {
+				_, err = db.Exec(`UPDATE owners SET tier='unlimited'`)
+			}
 		}
 	}
 	if err == nil {
-		_, err = db.Exec(`PRAGMA user_version=4`)
+		_, err = db.Exec(`PRAGMA user_version=5`)
 	}
 	if err != nil {
 		_ = db.Close()
@@ -276,11 +281,11 @@ func (s *Store) CreateToken(ctx context.Context, owner Identity, name string, ex
 	return t, secret, nil
 }
 
-const tokenColumns = `id,owner_id,name,prefix,created_at,expires_at,revoked_at,daily_limit,COALESCE((SELECT login FROM owners WHERE owners.id=tokens.owner_id),'')`
+const tokenColumns = `id,owner_id,name,prefix,created_at,expires_at,revoked_at,COALESCE((SELECT login FROM owners WHERE owners.id=tokens.owner_id),'')`
 
 func scanToken(row interface{ Scan(...any) error }) (Token, error) {
 	var t Token
-	err := row.Scan(&t.ID, &t.OwnerID, &t.Name, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.DailyLimit, &t.Owner)
+	err := row.Scan(&t.ID, &t.OwnerID, &t.Name, &t.Prefix, &t.CreatedAt, &t.ExpiresAt, &t.RevokedAt, &t.Owner)
 	return t, err
 }
 
@@ -317,18 +322,118 @@ func (s *Store) Authenticate(ctx context.Context, secret string) (Token, error) 
 	if err != nil {
 		return t, err
 	}
-	if t.DailyLimit > 0 {
-		now := s.now().UTC()
-		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
-		var used int64
-		if err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(tokens),0) FROM events WHERE token_id=? AND timestamp>=?`, t.ID, start).Scan(&used); err != nil {
-			return t, err
-		}
-		if used >= t.DailyLimit {
-			return t, errors.New("daily token limit reached")
-		}
+	l, err := s.Limit(ctx, t.OwnerID)
+	if err != nil {
+		return t, err
+	}
+	if l.Day > 0 && l.DayUsed >= l.Day {
+		return t, limitError("Today's Pool limit is used up. It resets at 00:00 UTC.")
+	}
+	if l.Week > 0 && l.WeekUsed >= l.Week {
+		return t, limitError("This week's Pool limit is used up. It frees up as last week's usage rolls off.")
 	}
 	return t, nil
+}
+
+var ErrLimited = errors.New("limit reached")
+
+// limitError is shown to clients as is, so it reads as a sentence.
+type limitError string
+
+func (e limitError) Error() string        { return string(e) }
+func (e limitError) Is(target error) bool { return target == ErrLimited }
+
+// Tiers cap a person's API-equivalent cost in micro-USD per UTC day and rolling 7 days. Zero is no cap.
+var Tiers = map[string]struct{ Day, Week int64 }{
+	"light":     {20_000_000, 100_000_000},
+	"standard":  {50_000_000, 200_000_000},
+	"unlimited": {},
+}
+
+type Limit struct {
+	Tier     string `json:"tier"`
+	Day      int64  `json:"-"`
+	Week     int64  `json:"-"`
+	DayUsed  int64  `json:"-"`
+	WeekUsed int64  `json:"-"`
+}
+
+// Limit reports a person's tier and priced usage today (UTC) and over the last 7 days.
+func (s *Store) Limit(ctx context.Context, owner string) (Limit, error) {
+	now := s.now().UTC()
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
+	var l Limit
+	err := s.db.QueryRowContext(ctx, `SELECT o.tier,
+ COALESCE((SELECT SUM(e.cost_micros) FROM events e JOIN tokens t ON t.id=e.token_id WHERE t.owner_id=o.id AND e.timestamp>=?),0),
+ COALESCE((SELECT SUM(e.cost_micros) FROM events e JOIN tokens t ON t.id=e.token_id WHERE t.owner_id=o.id AND e.timestamp>=?),0)
+ FROM owners o WHERE o.id=?`, day, now.AddDate(0, 0, -7).Unix(), owner).Scan(&l.Tier, &l.DayUsed, &l.WeekUsed)
+	if err != nil {
+		return l, err
+	}
+	caps := Tiers[l.Tier]
+	l.Day, l.Week = caps.Day, caps.Week
+	return l, nil
+}
+
+func (s *Store) SetTier(ctx context.Context, owner, tier string) error {
+	if _, ok := Tiers[tier]; !ok {
+		return errors.New("unknown tier")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE owners SET tier=? WHERE id=?`, tier, owner)
+	return changed(result, err)
+}
+
+type Member struct {
+	ID     string `json:"id"`
+	Login  string `json:"login"`
+	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
+	Tier   string `json:"tier"`
+	Tokens int64  `json:"tokens"`
+}
+
+// Members lists everyone who has signed in or owns a token, for admins to set tiers.
+func (s *Store) Members(ctx context.Context) ([]Member, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.login,CASE WHEN o.login='' THEN COALESCE((SELECT MIN(name) FROM tokens WHERE owner_id=o.id),'') ELSE o.name END,o.avatar,o.tier,
+ (SELECT COUNT(*) FROM tokens WHERE owner_id=o.id AND revoked_at=0) FROM owners o ORDER BY o.login='',o.login,o.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Member{}
+	for rows.Next() {
+		var m Member
+		if err = rows.Scan(&m.ID, &m.Login, &m.Name, &m.Avatar, &m.Tier, &m.Tokens); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+type AccountActivity struct {
+	Requests   int64 `json:"requests"`
+	CostMicros int64 `json:"cost_micros"`
+	LastUsed   int64 `json:"last_used"`
+}
+
+// AccountActivity totals requests per upstream account since a time.
+func (s *Store) AccountActivity(ctx context.Context, since int64) (map[string]AccountActivity, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT account,COUNT(*),COALESCE(SUM(cost_micros),0),MAX(timestamp) FROM events WHERE account!='' AND timestamp>=? GROUP BY account`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]AccountActivity{}
+	for rows.Next() {
+		var id string
+		var a AccountActivity
+		if err = rows.Scan(&id, &a.Requests, &a.CostMicros, &a.LastUsed); err != nil {
+			return nil, err
+		}
+		out[id] = a
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) Revoke(ctx context.Context, owner Identity, id string) error {
@@ -354,14 +459,6 @@ func changed(result sql.Result, err error) error {
 		return ErrNotFound
 	}
 	return err
-}
-
-func (s *Store) ConfigureToken(ctx context.Context, id string, limit int64) error {
-	if limit < 0 {
-		return errors.New("invalid token settings")
-	}
-	result, err := s.db.ExecContext(ctx, `UPDATE tokens SET daily_limit=? WHERE id=?`, limit, id)
-	return changed(result, err)
 }
 
 // RecordUsage stores canonical usage only; it never retains prompts or secrets.
@@ -399,7 +496,7 @@ func (s *Store) RecordUsage(ctx context.Context, r usage.Record) error {
 		at = s.now()
 	}
 	client, _ := ctx.Value(clientKey{}).(string)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO events(id,token_id,provider,model,timestamp,latency_ms,failed,tokens,input,output,cached,breakdown,price_id,cost_micros,client) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, r.RequestID, r.APIKey, r.Provider, r.Model, at.Unix(), r.Latency.Milliseconds(), r.Failed, d.TotalTokens, d.Input.TotalTokens, d.Output.TotalTokens, d.Input.CacheReadTokens, string(encoded), priceID, cost, client)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO events(id,token_id,provider,model,timestamp,latency_ms,failed,tokens,input,output,cached,breakdown,price_id,cost_micros,client,account) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, r.RequestID, r.APIKey, r.Provider, r.Model, at.Unix(), r.Latency.Milliseconds(), r.Failed, d.TotalTokens, d.Input.TotalTokens, d.Output.TotalTokens, d.Input.CacheReadTokens, string(encoded), priceID, cost, client, r.AuthID)
 	return err
 }
 

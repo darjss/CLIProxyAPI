@@ -3,8 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { css, cx } from "../../styled-system/css";
 import { button, field, iconButton } from "../../styled-system/recipes";
-import { api, date, number, useTokens, type Token } from "../api";
+import { api, date, useTokens, type Token } from "../api";
 import {
+  Chip,
   EmptyState,
   ErrorState,
   Loading,
@@ -15,6 +16,7 @@ import {
   card,
   formError,
   label,
+  palette,
   primaryCell,
   table,
   tableScroll,
@@ -90,7 +92,6 @@ export default function TokensPage() {
                 <th>Name</th>
                 <th>Key</th>
                 <th>Status</th>
-                <th>Daily limit</th>
                 <th>Created</th>
                 <th>Expires</th>
                 <th>
@@ -110,30 +111,17 @@ export default function TokensPage() {
                       </code>
                     </td>
                     <td>
-                      <span
-                        className={css({
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          _before: {
-                            content: '""',
-                            width: "7px",
-                            height: "7px",
-                            borderRadius: "full",
-                            background: "currentColor",
-                          },
-                        })}
-                        style={{
-                          color: state === "Active" ? "#4fbf7f" : "#68686e",
-                        }}
+                      <Chip
+                        color={
+                          state === "Active"
+                            ? palette.ok
+                            : state === "Revoked"
+                              ? palette.bad
+                              : palette.warn
+                        }
                       >
                         {state}
-                      </span>
-                    </td>
-                    <td>
-                      {token.daily_limit
-                        ? number.format(token.daily_limit)
-                        : "Unlimited"}
+                      </Chip>
                     </td>
                     <td>{date(token.created_at)}</td>
                     <td>

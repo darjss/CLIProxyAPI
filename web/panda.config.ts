@@ -53,6 +53,9 @@ export default defineConfig({
           ok: { value: "#4fbf7f" },
           warn: { value: "#e0b34f" },
           bad: { value: "#ef6b63" },
+          violet: { value: "#b48cff" },
+          teal: { value: "#4fc1b5" },
+          pink: { value: "#f07ab3" },
         },
         fonts: {
           mono: {
