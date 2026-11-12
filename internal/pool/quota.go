@@ -46,6 +46,7 @@ type QuotaAccount struct {
 	Message       string          `json:"message"`
 	CooldownUntil int64           `json:"cooldown_until"`
 	Day           AccountActivity `json:"day"`
+	FreeReset     *FreeReset      `json:"free_reset,omitempty"`
 }
 
 type QuotaPool struct {
@@ -71,6 +72,7 @@ type Collector struct {
 	wake    chan struct{}
 	done    chan struct{}
 	pending sync.Map
+	resets  sync.Map // quota ID -> FreeReset, refreshed with each collection
 	workers chan struct{}
 	wg      sync.WaitGroup
 }
@@ -150,7 +152,8 @@ func (q *Collector) schedule(ctx context.Context) {
 }
 
 func (q *Collector) fetch(ctx context.Context, a *coreauth.Auth) ([]QuotaSample, string) {
-	target := "https://api.anthropic.com/api/oauth/usage"
+	// The Claude usage endpoint also reports free reset grants when asked.
+	target := claudeUsageURL
 	if a.Provider == "codex" {
 		target = "https://chatgpt.com/backend-api/wham/usage"
 	}
@@ -159,17 +162,7 @@ func (q *Collector) fetch(ctx context.Context, a *coreauth.Auth) ([]QuotaSample,
 		if err != nil {
 			return nil, "request_error"
 		}
-		req.Header.Set("Accept", "application/json")
-		if a.Provider == "claude" {
-			req.Header.Set("anthropic-beta", "oauth-2025-04-20")
-			req.Header.Set("User-Agent", "claude-cli/2.1.280 (external, cli)")
-		}
-		if a.Provider == "codex" {
-			req.Header.Set("User-Agent", "codex-tui/0.149.1")
-			if id, ok := a.Metadata["account_id"].(string); ok && id != "" {
-				req.Header.Set("ChatGPT-Account-Id", id)
-			}
-		}
+		setProviderHeaders(req, a)
 		response, err := q.manager.HttpRequest(ctx, a, req)
 		if err != nil {
 			return nil, "connection_error"
@@ -196,6 +189,15 @@ func (q *Collector) fetch(ctx context.Context, a *coreauth.Auth) ([]QuotaSample,
 		samples := parseQuota(a.Provider, quotaID(a.ID), payload, at)
 		if len(samples) == 0 {
 			return nil, "unsupported_response"
+		}
+		reset := claudeFreeReset(payload)
+		if a.Provider == "codex" {
+			reset = q.codexFreeReset(ctx, a)
+		}
+		if reset != nil {
+			q.resets.Store(quotaID(a.ID), *reset)
+		} else {
+			q.resets.Delete(quotaID(a.ID))
 		}
 		return samples, "ok"
 	}
