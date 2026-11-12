@@ -58,8 +58,24 @@ Members can also create a token by naming it. The secret is returned once and on
 a SHA-256 digest is stored. Rankings show each member's GitHub handle and avatar.
 Access reports the GitHub user ID, and the public GitHub users API resolves it,
 so no GitHub App is needed. Emails and request history stay private. Members
-can rename or revoke their own keys. Admins can configure daily per-token caps
-using the administration page.
+can rename or revoke their own keys.
+
+Admins put each person on a tier in **Administration**. A tier caps the
+person's API-equivalent cost across all their tokens, per UTC day and per
+rolling 7 days:
+
+| Tier | Per day | Per 7 days |
+| --- | --- | --- |
+| Light | $20 | $100 |
+| Standard | $50 | $200 |
+| Unlimited | none | none |
+
+The amounts live in `Tiers` in `internal/pool/store.go`. The dashboard shows
+tier names only, and members see the share used on their Usage page. People
+signing in for the first time start on Standard. People who existed when tiers
+shipped start on Unlimited, so nobody was cut off mid-session. Once a cap is
+reached, inference returns HTTP 429 with an Anthropic-style
+`rate_limit_error` that says when it frees up.
 
 Clients use `https://pool.erxes.tech/v1` as the OpenAI-compatible base URL and send:
 
@@ -69,7 +85,7 @@ Authorization: Bearer <pool-token>
 
 Claude-compatible clients can send `X-Api-Key: <pool-token>` instead. The token
 identifies the owner and named client for usage tracking. Expiry, revocation, and
-daily limits apply without Cloudflare machine credentials. Treat the token as a
+tier limits apply without Cloudflare machine credentials. Treat the token as a
 password; anyone holding it can use its allocation.
 
 Anyone signed in can share an account from **Quick Start → Share an account**.
@@ -104,7 +120,7 @@ usage dispatcher before closing SQLite. This is observability, not a billing led
 
 Execution IDs deduplicate repeated deliveries. Retries remain distinct upstream
 executions. Cache and reasoning subtotals are not added to their parent totals.
-Daily caps use UTC and completed usage; in-flight requests can overshoot.
+Tier caps use completed, priced usage, so in-flight requests can overshoot.
 
 Pool loads public API rates from `https://models.dev/api.json` at startup and
 then daily. Claude models use the `anthropic` rates and Codex models use the
@@ -145,8 +161,15 @@ reset intervals from burn calculations, and include only the next reported
 reset. The horizon ends before a second unreported reset (or at 72 hours).
 They are estimates, not promised capacity. New accounts start without history.
 
-Dashboard OAuth management, per-owner aggregate limits, and usage retention
-automation remain subsequent increments.
+The **Accounts** page shows each account's email, a state such as "7-day limit
+used · back in 3d" or "Sign-in expired", its requests and cost in the last 24
+hours, and the quota windows. Admins can disable an account to take it out of
+routing without deleting its credentials. The state persists in the auth file,
+and a disabled account stays listed so it can be enabled again. The Models tab
+lists every model the enabled accounts serve, with the accounts behind it and
+its models.dev rate. Each event records the upstream account that served it.
+
+Usage retention automation remains a subsequent increment.
 
 ## Persistent deployment
 

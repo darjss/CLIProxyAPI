@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { UsageView, clients } from "../UsageView";
 import {
+  Chip,
   ErrorState,
   Loading,
   PageHeader,
@@ -19,15 +20,89 @@ import {
   Segmented,
   card,
   note,
+  palette,
   primaryCell,
   table,
   tableScroll,
+  tiers,
 } from "../ui";
 
-export const metricOptions = [
+const metricOptions = [
   { value: "cost" as const, label: "Cost" },
   { value: "tokens" as const, label: "Tokens" },
 ];
+
+/** Your tier and how much of today's and this week's cap is used. Hidden when uncapped. */
+function PlanBar() {
+  const me = useQuery(queries.me());
+  const limit = me.data?.limit;
+  if (!limit || (limit.day === undefined && limit.week === undefined))
+    return null;
+  const tier = tiers.find((t) => t.value === limit.tier);
+  const meters = [
+    { label: "Today", value: limit.day },
+    { label: "This week", value: limit.week },
+  ];
+  return (
+    <section
+      className={cx(
+        card,
+        css({
+          display: "flex",
+          alignItems: "center",
+          gap: "28px",
+          flexWrap: "wrap",
+          mb: "20px",
+          padding: "18px 26px",
+        }),
+      )}
+    >
+      {tier && <Chip color={tier.color}>{tier.label} plan</Chip>}
+      {meters.map((m) =>
+        m.value === undefined ? null : (
+          <div
+            key={m.label}
+            className={css({ display: "grid", gap: "6px", flex: "1 1 200px" })}
+          >
+            <span
+              className={css({
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: "14px",
+              })}
+            >
+              <span className={css({ color: "dim" })}>{m.label}</span>
+              <span className={css({ fontVariantNumeric: "tabular-nums" })}>
+                {Math.min(100, Math.round(m.value * 100))}% used
+              </span>
+            </span>
+            <div
+              className={css({
+                height: "6px",
+                borderRadius: "full",
+                background: "active",
+                overflow: "hidden",
+              })}
+            >
+              <div
+                className={css({ height: "100%", borderRadius: "full" })}
+                style={{
+                  width: Math.min(100, m.value * 100) + "%",
+                  background:
+                    m.value >= 0.9
+                      ? palette.bad
+                      : m.value >= 0.7
+                        ? palette.warn
+                        : palette.ok,
+                }}
+              />
+            </div>
+          </div>
+        ),
+      )}
+    </section>
+  );
+}
 
 export default function UsagePage() {
   const [period, setPeriod] = useState<Period>("7d");
@@ -50,6 +125,7 @@ export default function UsagePage() {
           options={periodOptions}
         />
       </PageHeader>
+      <PlanBar />
       <section className={card}>
         <UsageView period={period} metric={metric} />
       </section>

@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -14,10 +15,13 @@ import (
 )
 
 type Account struct {
-	ID       string `json:"id"`
-	Provider string `json:"provider"`
-	Status   string `json:"status"`
-	Disabled bool   `json:"disabled"`
+	ID       string   `json:"id"`
+	Provider string   `json:"provider"`
+	Status   string   `json:"status"`
+	Disabled bool     `json:"disabled"`
+	Email    string   `json:"email"`
+	Message  string   `json:"message"`
+	Models   []string `json:"models"`
 }
 
 // Portal owns routes independently of the privileged management API.
@@ -26,11 +30,13 @@ type Portal struct {
 	Verifier Verifier
 	Dev      bool
 	Accounts func() []Account
-	Quota    *Collector
-	Logins   *AccountLogins
-	GitHub   *GitHub
-	Setups   *Setups
-	now      func() time.Time
+	// SetDisabled takes an account out of routing, or back in, keeping its credentials.
+	SetDisabled func(ctx context.Context, id string, disabled bool) error
+	Quota       *Collector
+	Logins      *AccountLogins
+	GitHub      *GitHub
+	Setups      *Setups
+	now         func() time.Time
 }
 
 // withProfile attaches the cached GitHub profile, looking it up at most hourly until found.
@@ -142,8 +148,13 @@ func (p *Portal) Guard() gin.HandlerFunc {
 			return
 		}
 		t, err := p.Store.Authenticate(c.Request.Context(), bearer(c.Request))
+		if errors.Is(err, ErrLimited) {
+			// Anthropic-style error body; OpenAI clients also read error.message.
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"type": "error", "error": gin.H{"type": "rate_limit_error", "message": err.Error()}})
+			return
+		}
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid, expired, revoked, or limited Pool token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid, expired, or revoked Pool token"})
 			return
 		}
 		c.Set("userApiKey", t.ID)
@@ -160,7 +171,21 @@ func (p *Portal) Guard() gin.HandlerFunc {
 func (p *Portal) Register(r *gin.Engine) {
 	r.GET("/pool", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/pool/") })
 	g := r.Group("/pool/api")
-	g.GET("/me", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"identity": member(c), "development": p.Dev}) })
+	g.GET("/me", func(c *gin.Context) {
+		out := gin.H{"identity": member(c), "development": p.Dev}
+		// Members see how much of their tier is used as a fraction, not in dollars.
+		if l, err := p.Store.Limit(c.Request.Context(), member(c).ID); err == nil {
+			limit := gin.H{"tier": l.Tier}
+			if l.Day > 0 {
+				limit["day"] = float64(l.DayUsed) / float64(l.Day)
+			}
+			if l.Week > 0 {
+				limit["week"] = float64(l.WeekUsed) / float64(l.Week)
+			}
+			out["limit"] = limit
+		}
+		c.JSON(http.StatusOK, out)
+	})
 	g.GET("/quota", func(c *gin.Context) {
 		hours := 3
 		switch c.DefaultQuery("hours", "3") {
@@ -192,6 +217,31 @@ func (p *Portal) Register(r *gin.Engine) {
 		if err != nil {
 			respond(c, nil, err)
 			return
+		}
+		activity, err := p.Store.AccountActivity(c.Request.Context(), p.clock().Add(-24*time.Hour).Unix())
+		if err != nil {
+			respond(c, nil, err)
+			return
+		}
+		// Quota rows carry hashed IDs; match them back to auth records.
+		info := map[string]Account{}
+		if p.Accounts != nil {
+			for _, a := range p.Accounts() {
+				info[quotaID(a.ID)] = a
+			}
+		}
+		for i := range accounts {
+			a := info[accounts[i].ID]
+			accounts[i].Email, accounts[i].Disabled, accounts[i].Day = a.Email, a.Disabled, activity[a.ID]
+			accounts[i].AuthStatus, accounts[i].Message = a.Status, a.Message
+			delete(info, accounts[i].ID)
+		}
+		// The collector skips disabled accounts; list them so they can be enabled again.
+		for id, a := range info {
+			if a.Disabled && (a.Provider == "claude" || a.Provider == "codex") {
+				accounts = append(accounts, QuotaAccount{ID: id, Provider: a.Provider, Status: "disabled", Samples: []QuotaSample{},
+					Email: a.Email, Disabled: true, AuthStatus: a.Status, Message: a.Message, Day: activity[a.ID]})
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{"pools": pools, "accounts": accounts, "observed_at": p.clock().Unix()})
 	})
@@ -267,12 +317,86 @@ func (p *Portal) Register(r *gin.Engine) {
 		}
 		c.Next()
 	})
-	admin.GET("/accounts", func(c *gin.Context) {
-		v := []Account{}
-		if p.Accounts != nil {
-			v = p.Accounts()
+	// Models the pool can serve now, with the accounts behind each and its API rate.
+	g.GET("/models", func(c *gin.Context) {
+		prices, err := p.Store.LatestPrices(c.Request.Context())
+		if err != nil {
+			respond(c, nil, err)
+			return
 		}
-		c.JSON(http.StatusOK, v)
+		type model struct {
+			ID       string   `json:"id"`
+			Provider string   `json:"provider"`
+			Accounts []string `json:"accounts"`
+			Price    *Price   `json:"price"`
+		}
+		byID := map[string]*model{}
+		out := []*model{}
+		if p.Accounts != nil {
+			for _, a := range p.Accounts() {
+				if a.Disabled {
+					continue
+				}
+				for _, id := range a.Models {
+					m := byID[a.Provider+"/"+id]
+					if m == nil {
+						m = &model{ID: id, Provider: a.Provider}
+						if price, ok := prices[a.Provider+"/"+id]; ok {
+							m.Price = &price
+						}
+						byID[a.Provider+"/"+id] = m
+						out = append(out, m)
+					}
+					m.Accounts = append(m.Accounts, a.Email)
+				}
+			}
+		}
+		c.JSON(http.StatusOK, out)
+	})
+	admin.PUT("/accounts/:id", func(c *gin.Context) {
+		var body struct {
+			Disabled bool `json:"disabled"`
+		}
+		if !bind(c, &body) {
+			return
+		}
+		if p.SetDisabled == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "accounts are not loaded"})
+			return
+		}
+		// The dashboard only sees hashed quota IDs, never auth file names.
+		id := ""
+		if p.Accounts != nil {
+			for _, a := range p.Accounts() {
+				if quotaID(a.ID) == c.Param("id") {
+					id = a.ID
+				}
+			}
+		}
+		if id == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		err := p.SetDisabled(c.Request.Context(), id, body.Disabled)
+		respond(c, gin.H{"saved": err == nil}, err)
+	})
+	admin.GET("/members", func(c *gin.Context) {
+		v, err := p.Store.Members(c.Request.Context())
+		respond(c, v, err)
+	})
+	admin.PUT("/members/:id/tier", func(c *gin.Context) {
+		var body struct {
+			Tier string `json:"tier"`
+		}
+		if !bind(c, &body) {
+			return
+		}
+		if _, ok := Tiers[body.Tier]; !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "tier must be light, standard, or unlimited"})
+			return
+		}
+		err := p.Store.SetTier(c.Request.Context(), c.Param("id"), body.Tier)
+		respond(c, gin.H{"saved": err == nil}, err)
 	})
 	if p.Logins != nil {
 		// Anyone signed in can share an account with the pool; admins only set limits.
@@ -286,24 +410,6 @@ func (p *Portal) Register(r *gin.Engine) {
 			p.Quota.Refresh()
 		}
 		c.JSON(http.StatusAccepted, gin.H{"scheduled": true})
-	})
-	admin.GET("/tokens", func(c *gin.Context) {
-		v, err := p.Store.AllTokens(c.Request.Context())
-		respond(c, v, err)
-	})
-	admin.PUT("/tokens/:id/settings", func(c *gin.Context) {
-		var v struct {
-			DailyLimit int64 `json:"daily_limit"`
-		}
-		if !bind(c, &v) {
-			return
-		}
-		if v.DailyLimit < 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid settings"})
-			return
-		}
-		err := p.Store.ConfigureToken(c.Request.Context(), c.Param("id"), v.DailyLimit)
-		respond(c, gin.H{"saved": err == nil}, err)
 	})
 }
 

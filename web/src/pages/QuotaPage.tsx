@@ -1,22 +1,26 @@
 import { useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Command,
+  Plus,
   RefreshCw,
-  Users,
 } from "lucide-react";
 import { css, cx } from "../../styled-system/css";
 import { button, iconButton } from "../../styled-system/recipes";
 import {
   api,
+  dollars,
+  number,
+  type PoolModel,
   type QuotaAccount,
   type QuotaPool,
   type QuotaSample,
   type QuotaSnapshot,
 } from "../api";
+import ConnectAccount from "../ConnectAccount";
 import {
   numericDateTime,
   relative,
@@ -25,16 +29,22 @@ import {
   when,
 } from "../time";
 import {
+  Chip,
   EmptyState,
   ErrorState,
   Loading,
+  Modal,
   PageHeader,
   ProviderIcon,
   Segmented,
   Stat,
   card,
   formError,
+  palette,
+  primaryCell,
   providerName,
+  table,
+  tableScroll,
 } from "../ui";
 import { QuotaChart, type View } from "./QuotaChart";
 
@@ -54,7 +64,8 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
   const [view, setView] = useState<View>("remaining");
   const [hours, setHours] = useState<Hours>("3");
   const [scenario, setScenario] = useState<Scenario>("same");
-  const [showAccounts, setShowAccounts] = useState(false);
+  const [tab, setTab] = useState<"quota" | "models">("quota");
+  const [connecting, setConnecting] = useState(false);
   const [shift, setShift] = useState(0);
   const quota = useQuery({
     queryKey: ["quota", hours, scenario],
@@ -91,7 +102,7 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
   return (
     <>
       <PageHeader
-        title="Quota Management"
+        title="Accounts"
         meta={
           quota.data && (
             <>
@@ -104,9 +115,18 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
           )
         }
       >
+        <Segmented
+          label="View"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "quota", label: "Quota" },
+            { value: "models", label: "Models" },
+          ]}
+        />
         {admin && (
           <button
-            className={button({ variant: "primary" })}
+            className={button()}
             disabled={refresh.isPending}
             onClick={() => refresh.mutate()}
           >
@@ -114,11 +134,23 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
             {refresh.isPending
               ? "Scheduling…"
               : refresh.isSuccess
-                ? "Refresh scheduled"
-                : "Refresh all accounts"}
+                ? "Scheduled"
+                : "Refresh"}
           </button>
         )}
+        <button
+          className={button({ variant: "primary" })}
+          onClick={() => setConnecting(true)}
+        >
+          <Plus size={16} />
+          Connect account
+        </button>
       </PageHeader>
+      {connecting && (
+        <Modal title="Connect an account" onClose={() => setConnecting(false)}>
+          <ConnectAccount />
+        </Modal>
+      )}
       {refresh.isError && (
         <p
           role="alert"
@@ -128,215 +160,261 @@ export default function QuotaPage({ admin }: { admin: boolean }) {
         </p>
       )}
 
-      <div className={css({ marginBottom: "14px" })}>
-        <Segmented
-          label="Provider"
-          plain
-          value={provider}
-          onChange={setProvider}
-          options={[
-            {
-              value: "all",
-              label: (
-                <>
-                  <Command size={16} />
-                  All
-                </>
-              ),
-              count: accounts.length,
-            },
-            ...providers.map((value) => ({
-              value,
-              label: (
-                <>
-                  <ProviderIcon provider={value} />
-                  {providerName(value)}
-                </>
-              ),
-              count: count(value),
-            })),
-          ]}
-        />
-      </div>
-
-      <div
-        className={css({
-          display: "flex",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "12px",
-          marginBottom: "22px",
-        })}
-      >
-        <Segmented
-          label="Chart"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "remaining", label: "Remaining" },
-            { value: "drain", label: "Drain rate" },
-          ]}
-        />
-        <Control label="Burn rate">
-          <Segmented
-            label="Burn rate window"
-            value={hours}
-            onChange={setHours}
-            options={[
-              { value: "1", label: "1h" },
-              { value: "3", label: "3h" },
-              { value: "6", label: "6h" },
-            ]}
-          />
-        </Control>
-        <Control label="Future usage">
-          <div className={css({ position: "relative" })}>
-            <select
-              aria-label="Future usage"
-              value={scenario}
-              onChange={(event) => setScenario(event.target.value as Scenario)}
-              className={css({
-                appearance: "none",
-                height: "42px",
-                paddingInline: "14px 40px",
-                borderRadius: "12px",
-                background: "card",
-                color: "fg",
-                fontSize: "15px",
-                fontWeight: 500,
-                _hover: { background: "raised" },
-                "& option": { background: "#18181a" },
-              })}
-            >
-              <option value="same">Same as now</option>
-              <option value="half">Half as much</option>
-              <option value="double">Twice as much</option>
-            </select>
-            <ChevronDown
-              size={16}
-              className={css({
-                position: "absolute",
-                right: "14px",
-                top: "13px",
-                pointerEvents: "none",
-                color: "dim",
-              })}
+      {tab === "models" ? (
+        <Models />
+      ) : (
+        <>
+          <div className={css({ marginBottom: "14px" })}>
+            <Segmented
+              label="Provider"
+              plain
+              value={provider}
+              onChange={setProvider}
+              options={[
+                {
+                  value: "all",
+                  label: (
+                    <>
+                      <Command size={16} />
+                      All
+                    </>
+                  ),
+                  count: accounts.length,
+                },
+                ...providers.map((value) => ({
+                  value,
+                  label: (
+                    <>
+                      <ProviderIcon provider={value} />
+                      {providerName(value)}
+                    </>
+                  ),
+                  count: count(value),
+                })),
+              ]}
             />
           </div>
-        </Control>
-        <button
-          aria-pressed={showAccounts}
-          onClick={() => setShowAccounts((value) => !value)}
-          className={css({
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            height: "42px",
-            paddingInline: "16px",
-            borderRadius: "12px",
-            background: "card",
-            color: "dim",
-            fontSize: "15px",
-            _hover: { color: "fg" },
-            "&[aria-pressed=true]": {
-              background: "active",
-              color: "fg",
-              fontWeight: 500,
-            },
-          })}
-        >
-          <Users size={16} />
-          Accounts
-        </button>
-        <div
-          className={css({
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            marginLeft: "auto",
-            color: "dim",
-            fontSize: "15px",
-          })}
-        >
-          <span className={css({ marginRight: "6px", whiteSpace: "nowrap" })}>
-            {shortDate(domain[0])} to {shortDate(domain[1] - 1)}
-          </span>
-          <button
-            className={iconButton()}
-            aria-label="Earlier"
-            disabled={domain[0] <= oldest}
-            onClick={() => setShift((value) => value - 1)}
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button
-            className={button({ size: "md" })}
-            disabled={shift === 0}
-            onClick={() => setShift(0)}
-          >
-            Today
-          </button>
-          <button
-            className={iconButton()}
-            aria-label="Later"
-            disabled={shift === 0}
-            onClick={() => setShift((value) => value + 1)}
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      </div>
 
-      {quota.isError && !quota.data ? (
-        <ErrorState error={quota.error} retry={() => void quota.refetch()} />
-      ) : !quota.data ? (
-        <Loading label="Reading quota snapshots…" />
-      ) : (
-        <div
-          className={css({
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr)",
-            gap: "20px",
-          })}
-        >
-          {providers
-            .filter((value) => provider === "all" || provider === value)
-            .map((value) => (
-              <ProviderCard
-                key={value}
-                provider={value}
-                pools={quota.data.pools.filter(
-                  (pool) => pool.provider === value,
-                )}
-                accounts={accounts.filter(
-                  (account) => account.provider === value,
-                )}
-                view={view}
-                now={now}
-                domain={domain}
-                hours={Number(hours)}
-                factor={factors[scenario]}
-                showAccounts={showAccounts}
+          <div
+            className={css({
+              display: "flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "12px",
+              marginBottom: "22px",
+            })}
+          >
+            <Segmented
+              label="Chart"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "remaining", label: "Remaining" },
+                { value: "drain", label: "Drain rate" },
+              ]}
+            />
+            <Control label="Burn rate">
+              <Segmented
+                label="Burn rate window"
+                value={hours}
+                onChange={setHours}
+                options={[
+                  { value: "1", label: "1h" },
+                  { value: "3", label: "3h" },
+                  { value: "6", label: "6h" },
+                ]}
               />
-            ))}
-        </div>
+            </Control>
+            <Control label="Future usage">
+              <div className={css({ position: "relative" })}>
+                <select
+                  aria-label="Future usage"
+                  value={scenario}
+                  onChange={(event) =>
+                    setScenario(event.target.value as Scenario)
+                  }
+                  className={css({
+                    appearance: "none",
+                    height: "42px",
+                    paddingInline: "14px 40px",
+                    borderRadius: "12px",
+                    background: "card",
+                    color: "fg",
+                    fontSize: "15px",
+                    fontWeight: 500,
+                    _hover: { background: "raised" },
+                    "& option": { background: "#18181a" },
+                  })}
+                >
+                  <option value="same">Same as now</option>
+                  <option value="half">Half as much</option>
+                  <option value="double">Twice as much</option>
+                </select>
+                <ChevronDown
+                  size={16}
+                  className={css({
+                    position: "absolute",
+                    right: "14px",
+                    top: "13px",
+                    pointerEvents: "none",
+                    color: "dim",
+                  })}
+                />
+              </div>
+            </Control>
+            <div
+              className={css({
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                marginLeft: "auto",
+                color: "dim",
+                fontSize: "15px",
+              })}
+            >
+              <span
+                className={css({ marginRight: "6px", whiteSpace: "nowrap" })}
+              >
+                {shortDate(domain[0])} to {shortDate(domain[1] - 1)}
+              </span>
+              <button
+                className={iconButton()}
+                aria-label="Earlier"
+                disabled={domain[0] <= oldest}
+                onClick={() => setShift((value) => value - 1)}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                className={button({ size: "md" })}
+                disabled={shift === 0}
+                onClick={() => setShift(0)}
+              >
+                Today
+              </button>
+              <button
+                className={iconButton()}
+                aria-label="Later"
+                disabled={shift === 0}
+                onClick={() => setShift((value) => value + 1)}
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+
+          {quota.isError && !quota.data ? (
+            <ErrorState
+              error={quota.error}
+              retry={() => void quota.refetch()}
+            />
+          ) : !quota.data ? (
+            <Loading label="Reading quota snapshots…" />
+          ) : (
+            <div
+              className={css({
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1fr)",
+                gap: "20px",
+              })}
+            >
+              {providers
+                .filter((value) => provider === "all" || provider === value)
+                .map((value) => (
+                  <ProviderCard
+                    key={value}
+                    provider={value}
+                    pools={quota.data.pools.filter(
+                      (pool) => pool.provider === value,
+                    )}
+                    accounts={accounts.filter(
+                      (account) => account.provider === value,
+                    )}
+                    view={view}
+                    now={now}
+                    domain={domain}
+                    hours={Number(hours)}
+                    factor={factors[scenario]}
+                    admin={admin}
+                  />
+                ))}
+            </div>
+          )}
+        </>
       )}
-      <p
-        className={css({
-          color: "faint",
-          fontSize: "13px",
-          lineHeight: 1.6,
-          marginTop: "22px",
-          maxWidth: "900px",
-        })}
-      >
-        Each measured account contributes 100 quota points. Plans can have
-        different capacity; these are unweighted account percentages, not token
-        balances. History covers current accounts and begins when collection
-        starts. Dashed projections assume recent burn and only the next reported
-        reset; they are estimates.
-      </p>
     </>
+  );
+}
+
+function Models() {
+  const models = useQuery({
+    queryKey: ["models"],
+    queryFn: ({ signal }) => api<PoolModel[]>("/models", { signal }),
+  });
+  if (models.isError)
+    return (
+      <ErrorState error={models.error} retry={() => void models.refetch()} />
+    );
+  if (models.isPending) return <Loading />;
+  if (!models.data.length)
+    return (
+      <div className={card}>
+        <EmptyState
+          title="No models yet."
+          description="Models appear once an enabled account is connected."
+        />
+      </div>
+    );
+  const rate = (v?: number) => (v === undefined ? "—" : "$" + v);
+  return (
+    <div className={cx(card, tableScroll)}>
+      <table className={table}>
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Accounts</th>
+            <th title="USD per million tokens">Input</th>
+            <th>Cache read</th>
+            <th>Cache write</th>
+            <th>Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          {models.data.map((m) => (
+            <tr key={m.provider + m.id}>
+              <td className={primaryCell}>
+                <span
+                  className={css({
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  })}
+                >
+                  <ProviderIcon provider={m.provider} size={15} />
+                  {m.id}
+                </span>
+              </td>
+              <td title={m.accounts.join("\n")}>
+                <Chip
+                  color={
+                    colors[m.provider as "claude" | "codex"] ?? palette.gray
+                  }
+                >
+                  {m.accounts.length}
+                </Chip>
+              </td>
+              <td>{rate(m.price?.input)}</td>
+              <td>{rate(m.price?.cache_read)}</td>
+              <td>{rate(m.price?.cache_write)}</td>
+              <td>{rate(m.price?.output)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className={css({ color: "faint", fontSize: "13px", mt: "12px" })}>
+        API rates per million tokens, from models.dev.
+      </p>
+    </div>
   );
 }
 
@@ -388,8 +466,9 @@ function ProviderCard({
   domain,
   hours,
   factor,
-  showAccounts,
+  admin,
 }: {
+  admin: boolean;
   provider: "claude" | "codex";
   pools: QuotaPool[];
   accounts: QuotaAccount[];
@@ -398,7 +477,6 @@ function ProviderCard({
   domain: [number, number];
   hours: number;
   factor: number;
-  showAccounts: boolean;
 }) {
   const [selected, setSelected] = useState("");
   const sorted = [...pools].sort(
@@ -460,19 +538,19 @@ function ProviderCard({
         <EmptyState
           title={
             accounts.length
-              ? "Waiting for the first observation."
-              : "Connect an account to start."
+              ? "Waiting for the first quota check."
+              : "No accounts yet."
           }
           description={
             accounts.length
-              ? "The collector checks the provider in the background every two minutes. Any errors are shown in the account list."
-              : "Sign in with the existing CLI OAuth flow. Server-side history will collect even when this page is closed."
+              ? "Quota is checked every two minutes."
+              : "Use Connect account to share one."
           }
         />
       )}
 
-      {showAccounts && accounts.length > 0 && (
-        <AccountRows accounts={accounts} now={now} />
+      {accounts.length > 0 && (
+        <AccountRows accounts={accounts} now={now} admin={admin} />
       )}
     </section>
   );
@@ -689,12 +767,54 @@ function barColor(value: number) {
   return value >= 50 ? "#4fbf7f" : value >= 20 ? "#e0b34f" : "#ef6b63";
 }
 
+/** One plain-language state per account; quota exhaustion explains most upstream errors. */
+function accountState(account: QuotaAccount, now: number) {
+  if (account.disabled) return { label: "Disabled", color: palette.gray };
+  const empty = account.windows
+    .filter((w) => w.remaining <= 0 && w.reset_at > now)
+    .sort((a, b) => b.reset_at - a.reset_at)[0];
+  if (empty)
+    return {
+      label: `${windowLabel(empty.window, empty.period_seconds)} limit used · back ${relative(empty.reset_at, now)}`,
+      color: palette.warn,
+    };
+  if (account.status === "sign_in_required")
+    return { label: "Sign-in expired · reconnect", color: palette.bad };
+  if (account.auth_status === "error" || account.status !== "ok")
+    return { label: "Error", color: palette.bad, title: account.message };
+  return { label: "Active", color: palette.ok };
+}
+
+function AccountToggle({ account }: { account: QuotaAccount }) {
+  const client = useQueryClient();
+  const toggle = useMutation({
+    mutationFn: () =>
+      api(`/admin/accounts/${encodeURIComponent(account.id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ disabled: !account.disabled }),
+      }),
+    onSuccess: () => void client.invalidateQueries({ queryKey: ["quota"] }),
+  });
+  return (
+    <button
+      className={button({ size: "md" })}
+      disabled={toggle.isPending}
+      title={toggle.isError ? toggle.error.message : undefined}
+      onClick={() => toggle.mutate()}
+    >
+      {account.disabled ? "Enable" : "Disable"}
+    </button>
+  );
+}
+
 function AccountRows({
   accounts,
   now,
+  admin,
 }: {
   accounts: QuotaAccount[];
   now: number;
+  admin: boolean;
 }) {
   return (
     <div
@@ -704,6 +824,7 @@ function AccountRows({
       })}
     >
       {accounts.map((account) => {
+        const state = accountState(account, now);
         const windows = [...account.windows].sort(
           (a, b) => b.period_seconds - a.period_seconds,
         );
@@ -730,29 +851,39 @@ function AccountRows({
                 })}
               >
                 <ProviderIcon provider={account.provider} size={15} />
-                <code
+                <span
                   className={css({
                     fontSize: "15px",
                     fontWeight: 600,
                     color: "fg",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   })}
                 >
-                  {account.provider}-{account.id.slice(0, 6)}
-                </code>
+                  {account.email ||
+                    account.provider + "-" + account.id.slice(0, 6)}
+                </span>
               </span>
-              <span className={css({ color: "dim", fontSize: "14px" })}>
-                {account.status === "ok" ? (
-                  "Reporting"
-                ) : (
-                  <span className={css({ color: "bad" })}>
-                    {account.status.replaceAll("_", " ")}
-                  </span>
-                )}
+              <span
+                className={css({
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  flexWrap: "wrap",
+                })}
+              >
+                <span title={state.title}>
+                  <Chip color={state.color}>{state.label}</Chip>
+                </span>
+                {admin && <AccountToggle account={account} />}
               </span>
               <span className={css({ color: "faint", fontSize: "14px" })}>
+                {account.day.requests
+                  ? `${number.format(account.day.requests)} requests · ${dollars(account.day.cost_micros)} in 24h`
+                  : "No requests in 24h"}
                 {account.checked_at
-                  ? "Checked " + relative(account.checked_at, now)
-                  : "Not checked yet"}
+                  ? " · checked " + relative(account.checked_at, now)
+                  : ""}
               </span>
             </div>
             {windows.length ? (

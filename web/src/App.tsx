@@ -38,13 +38,13 @@ type NavItem = { id: Page; label: string; icon: LucideIcon; admin?: boolean };
 
 const navigation: NavItem[][] = [
   [
-    { id: "quota", label: "Quota", icon: Gauge },
+    { id: "quota", label: "Accounts", icon: Gauge },
     { id: "setup", label: "Quick Start", icon: Zap },
   ],
   [
-    { id: "tokens", label: "API Tokens", icon: KeyRound },
     { id: "usage", label: "Usage", icon: Activity },
     { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+    { id: "tokens", label: "API Tokens", icon: KeyRound },
   ],
   [
     {
@@ -238,6 +238,7 @@ function Shell({ me }: { me: Me }) {
                         background: "raised",
                         color: "fg",
                         fontWeight: 500,
+                        "& svg": { color: "focus" },
                       },
                       mdDown: {
                         height: "38px",
