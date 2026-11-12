@@ -27,7 +27,7 @@ function status(token: Token, now: number) {
   return "Active";
 }
 
-export default function TokensPage({ development }: { development: boolean }) {
+export default function TokensPage() {
   const tokens = useTokens();
   const client = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -63,11 +63,6 @@ export default function TokensPage({ development }: { development: boolean }) {
           Create token
         </button>
       </PageHeader>
-      <p className={cx(caption, css({ mt: "-12px", mb: "24px" }))}>
-        {development
-          ? "Use your token as the API key against this loopback server."
-          : "Use your token as the API key in Claude, Codex, or any compatible client. Only the dashboard requires GitHub login."}
-      </p>
       {tokens.isError ? (
         <ErrorState error={tokens.error} retry={() => void tokens.refetch()} />
       ) : tokens.isPending ? (
@@ -75,8 +70,8 @@ export default function TokensPage({ development }: { development: boolean }) {
       ) : !tokens.data.length ? (
         <div className={card}>
           <EmptyState
-            title="Make your first connection."
-            description="Name a token after the person, machine, or project using it."
+            title="No tokens yet."
+            description="Create one per machine or tool, like “Laptop · Claude Code”."
           >
             <button
               className={button({ variant: "primary" })}
@@ -310,7 +305,7 @@ function CreateTokenDialog({ onClose }: { onClose: () => void }) {
             onChange={(event) => setName(event.target.value)}
             required
             maxLength={80}
-            placeholder="Darjs laptop"
+            placeholder="Laptop · Claude Code"
             autoComplete="off"
           />
         </label>

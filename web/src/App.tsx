@@ -24,7 +24,7 @@ import {
 import { css, cx } from "../styled-system/css";
 import { iconButton } from "../styled-system/recipes";
 import { queries, type Me } from "./api";
-import { ErrorState, Loading } from "./ui";
+import { ErrorState, Loading, Person } from "./ui";
 
 const QuotaPage = lazy(() => import("./pages/QuotaPage"));
 const SetupPage = lazy(() => import("./pages/SetupPage"));
@@ -273,20 +273,14 @@ function Shell({ me }: { me: Me }) {
         >
           {!collapsed && (
             <>
-              <span
-                className={css({
-                  color: "dim",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                })}
-              >
-                {me.identity.email}
+              <span className={css({ color: "fg", fontSize: "14px" })}>
+                {me.identity.login ? (
+                  <Person person={me.identity} />
+                ) : (
+                  me.identity.email
+                )}
               </span>
-              <span>
-                {admin ? "Administrator" : "Member"} ·{" "}
-                {me.development ? "Local development" : "Cloudflare Access"}
-              </span>
+              {admin && <span>Admin</span>}
             </>
           )}
         </div>
@@ -338,7 +332,7 @@ function Shell({ me }: { me: Me }) {
                 color: "warn",
               })}
             >
-              Development mode · fixed local identity
+              Development mode
             </span>
           )}
           <button
@@ -379,7 +373,7 @@ function Shell({ me }: { me: Me }) {
           <Suspense fallback={<Loading />}>
             {page === "quota" && <QuotaPage admin={admin} />}
             {page === "setup" && <SetupPage />}
-            {page === "tokens" && <TokensPage development={me.development} />}
+            {page === "tokens" && <TokensPage />}
             {page === "usage" && <UsagePage />}
             {page === "leaderboard" && <LeaderboardPage />}
             {page === "admin" &&

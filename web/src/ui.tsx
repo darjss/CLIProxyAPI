@@ -547,5 +547,51 @@ export function ProviderIcon({
   );
 }
 
+function avatarURL(avatar: string, pixels: number) {
+  const url = new URL(avatar);
+  url.searchParams.set("s", String(pixels));
+  return url.href;
+}
+
+/** GitHub avatar and handle; falls back to a name until the person signs in again. */
+export function Person({
+  person,
+  size = 24,
+}: {
+  person: { login: string; name: string; avatar: string };
+  size?: number;
+}) {
+  return (
+    <span
+      className={css({
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "10px",
+      })}
+    >
+      {person.avatar ? (
+        <img
+          src={avatarURL(person.avatar, size * 2)}
+          alt=""
+          width={size}
+          height={size}
+          className={css({ borderRadius: "full", flexShrink: 0 })}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className={css({
+            borderRadius: "full",
+            background: "raised",
+            flexShrink: 0,
+          })}
+          style={{ width: size, height: size }}
+        />
+      )}
+      {person.login ? "@" + person.login : person.name || "Unknown member"}
+    </span>
+  );
+}
+
 export const providerName = (provider: string) =>
   provider === "claude" ? "Claude" : provider === "codex" ? "Codex" : provider;

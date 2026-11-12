@@ -45,6 +45,7 @@ func run() error {
 	team := flag.String("access-team", os.Getenv("POOL_ACCESS_TEAM"), "Cloudflare Access team hostname")
 	audience := flag.String("access-audience", os.Getenv("POOL_ACCESS_AUDIENCE"), "Cloudflare Access application audience")
 	admins := flag.String("admins", os.Getenv("POOL_ADMINS"), "Comma-separated verified Access admin emails")
+	devGitHubID := flag.Int64("dev-github-id", 0, "GitHub user ID shown for the development identity")
 	flag.Parse()
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
@@ -75,12 +76,17 @@ func run() error {
 	}()
 	portal := &pool.Portal{Store: store, Dev: *dev}
 	if !*dev {
-		portal.Verifier, err = pool.NewAccessVerifier(*team, *audience, strings.Split(*admins, ","))
-		if err != nil {
-			return err
+		verifier, errVerifier := pool.NewAccessVerifier(*team, *audience, strings.Split(*admins, ","))
+		if errVerifier != nil {
+			return errVerifier
 		}
+		portal.Verifier = verifier
+		portal.GitHub = pool.NewGitHub(verifier.IdentityURL(), 0)
 	} else {
 		log.Warn("Pool development identity enabled; listening on loopback only")
+		if *devGitHubID > 0 {
+			portal.GitHub = pool.NewGitHub("", *devGitHubID)
+		}
 	}
 	provider := &pool.TokenProvider{Store: store}
 	sdkaccess.RegisterProvider(pool.ProviderID, provider)
@@ -111,7 +117,7 @@ func run() error {
 			}
 			portal.Register(r)
 			r.GET("/pool/", func(c *gin.Context) {
-				c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+				c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 				index := filepath.Join(*webDir, "index.html")
 				if _, errStat := os.Stat(index); errStat != nil {
 					c.String(http.StatusServiceUnavailable, "Pool dashboard is not built. Run npm --prefix web ci && npm --prefix web run build.")
