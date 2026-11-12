@@ -78,40 +78,110 @@ function SignIn({ url, provider }: { url: string; provider: Provider }) {
   );
 }
 
-/** What the failed redirect page looks like, so people know which address to copy. */
+/**
+ * A small drawing of the browser tab Claude leaves you on, so people know
+ * which address to copy. It is a picture, not a field: no focus, no selection.
+ */
 function AddressBar() {
   return (
-    <div
-      aria-hidden="true"
+    <figure
+      aria-label="Example: the page that won't load, with its address bar"
       className={css({
         display: "grid",
         gap: "6px",
-        padding: "10px 12px",
-        borderRadius: "10px",
-        background: "raised",
-        border: "1px solid token(colors.edge)",
-        fontSize: "13px",
+        maxWidth: "460px",
+        userSelect: "none",
+        pointerEvents: "none",
       })}
     >
-      <span
+      <figcaption
         className={css({
-          fontFamily: "mono",
-          padding: "6px 10px",
-          borderRadius: "7px",
-          background: "canvas",
-          color: "fg",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          outline: "2px solid token(colors.focus)",
+          fontSize: "12px",
+          color: "faint",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
         })}
       >
-        localhost:54545/callback?code=Xy7…&amp;state=…
+        Example
+      </figcaption>
+      <div
+        aria-hidden="true"
+        className={css({
+          borderRadius: "10px",
+          border: "1px solid token(colors.edge)",
+          overflow: "hidden",
+          background: "#141416",
+        })}
+      >
+        <div
+          className={css({
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "8px 10px",
+            background: "#1c1c1f",
+            borderBottom: "1px solid token(colors.line)",
+          })}
+        >
+          <span className={css({ display: "flex", gap: "5px" })}>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className={css({
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "full",
+                  background: "#3a3a3f",
+                })}
+              />
+            ))}
+          </span>
+          <span
+            className={css({
+              flex: 1,
+              minWidth: 0,
+              padding: "3px 10px",
+              borderRadius: "full",
+              background: "#0f0f10",
+              fontSize: "12px",
+              color: "dim",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            })}
+          >
+            <span
+              className={css({
+                color: "fg",
+                background: "rgba(138,164,255,0.28)",
+                borderRadius: "3px",
+                padding: "0 2px",
+              })}
+            >
+              localhost:54545/callback?code=Xy7…&state=…
+            </span>
+          </span>
+        </div>
+        <div
+          className={css({
+            display: "grid",
+            gap: "2px",
+            padding: "14px 16px 16px",
+            fontSize: "13px",
+          })}
+        >
+          <strong className={css({ fontWeight: 600, color: "#c8c8cc" })}>
+            This site can't be reached
+          </strong>
+          <span className={css({ color: "faint" })}>
+            localhost refused to connect.
+          </span>
+        </div>
+      </div>
+      <span className={css({ fontSize: "13px", color: "dim" })}>
+        Copy the highlighted address from the top of the window.
       </span>
-      <span className={css({ color: "dim" })}>
-        This site can't be reached ← copy the address above, not this message
-      </span>
-    </div>
+    </figure>
   );
 }
 
