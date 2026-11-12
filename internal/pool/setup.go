@@ -18,7 +18,6 @@ import (
 const (
 	setupTTL         = 10 * time.Minute
 	tokenPlaceholder = "pool_PASTE_YOUR_TOKEN"
-	tokenFile        = "~/.config/pool/token"
 )
 
 // configFile is one file a harness reads. JSON is deep-merged into the existing file;
@@ -39,10 +38,8 @@ type harness struct {
 	files   func(base, model, token string) []configFile
 }
 
-var claudeModels = []string{"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"}
-
 var harnesses = map[string]harness{
-	"claude": {Label: "Claude Code", Install: "curl -fsSL https://claude.ai/install.sh | bash", Run: "claude", Models: claudeModels,
+	"claude": {Label: "Claude Code", Install: "curl -fsSL https://claude.ai/install.sh | bash", Run: "claude", Models: []string{"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"},
 		files: func(base, model, token string) []configFile {
 			return []configFile{{Path: "~/.claude/settings.json",
 				RemoveEnv: []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"},
@@ -57,30 +54,6 @@ var harnesses = map[string]harness{
 				TOMLTop: map[string]string{"model_provider": "pool", "model": model},
 				TOMLBlock: "[model_providers.pool]\nname = \"Pool\"\nbase_url = \"" + base + "/v1\"\nwire_api = \"responses\"\n" +
 					"auth = { command = \"cat\", args = [\"{TOKEN_FILE}\"] }\n"}}
-		}},
-	"opencode": {Label: "OpenCode", Install: "curl -fsSL https://opencode.ai/v2/install | bash", Run: "opencode", Models: claudeModels,
-		files: func(base, model, _ string) []configFile {
-			models := map[string]any{}
-			for _, m := range claudeModels {
-				models[m] = map[string]any{}
-			}
-			return []configFile{{Path: "~/.config/opencode/opencode.json", JSON: map[string]any{
-				"$schema": "https://opencode.ai/config.json", "model": "pool/" + model,
-				"providers": map[string]any{"pool": map[string]any{"name": "Pool", "canonical": "anthropic",
-					"settings": map[string]any{"baseURL": base + "/v1", "apiKey": "{file:" + tokenFile + "}"}, "models": models}},
-			}}}
-		}},
-	"pi": {Label: "Pi", Install: "curl -fsSL https://pi.dev/install.sh | sh", Run: "pi", Models: claudeModels,
-		files: func(base, model, _ string) []configFile {
-			models := []any{}
-			for _, m := range claudeModels {
-				models = append(models, map[string]any{"id": m})
-			}
-			return []configFile{
-				{Path: "~/.pi/agent/models.json", JSON: map[string]any{"providers": map[string]any{"pool": map[string]any{
-					"baseUrl": base, "api": "anthropic-messages", "apiKey": "!cat {TOKEN_FILE}", "models": models}}}},
-				{Path: "~/.pi/agent/settings.json", JSON: map[string]any{"defaultProvider": "pool", "defaultModel": model}},
-			}
 		}},
 }
 
