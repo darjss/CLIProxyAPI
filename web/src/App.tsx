@@ -26,6 +26,8 @@ import { iconButton } from "../styled-system/recipes";
 import { queries, useTokens, type Me } from "./api";
 import { ErrorState, Loading, Person } from "./ui";
 
+const welcomeKey = "pool.welcomed";
+
 const QuotaPage = lazy(() => import("./pages/QuotaPage"));
 const SetupPage = lazy(() => import("./pages/SetupPage"));
 const TokensPage = lazy(() => import("./pages/TokensPage"));
@@ -175,11 +177,27 @@ function Shell({ me }: { me: Me }) {
     return () => window.removeEventListener("keydown", toggle);
   }, []);
 
-  // Someone with no tokens yet starts on Quick Start instead of Accounts.
+  // Someone with no tokens yet starts on Quick Start in welcome mode.
+  const [welcomed, setWelcomed] = useState(() => {
+    try {
+      return localStorage.getItem(welcomeKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const firstRun = tokens.data?.length === 0 && !welcomed;
   useEffect(() => {
-    if (!window.location.hash && tokens.data?.length === 0)
-      window.location.hash = "#/setup";
-  }, [tokens.data]);
+    if (firstRun && !window.location.hash) window.location.hash = "#/setup";
+  }, [firstRun]);
+  const finishWelcome = () => {
+    try {
+      localStorage.setItem(welcomeKey, "1");
+    } catch {
+      // Private windows can block storage; the welcome still closes.
+    }
+    setWelcomed(true);
+    window.location.hash = "#/usage";
+  };
 
   return (
     <div
@@ -396,7 +414,9 @@ function Shell({ me }: { me: Me }) {
         <main className={css({ maxWidth: "1560px" })}>
           <Suspense fallback={<Loading />}>
             {page === "quota" && <QuotaPage admin={admin} />}
-            {page === "setup" && <SetupPage />}
+            {page === "setup" && (
+              <SetupPage onDone={firstRun ? finishWelcome : undefined} />
+            )}
             {page === "tokens" && <TokensPage />}
             {page === "usage" && <UsagePage />}
             {page === "leaderboard" && <LeaderboardPage />}

@@ -13,7 +13,6 @@ import {
   caption,
   formError,
   label,
-  providerName,
 } from "./ui";
 
 type Provider = "claude" | "codex";
@@ -33,6 +32,88 @@ type Login = {
   error?: string;
   expires_at: number;
 };
+
+// Numbered rows; each li holds one div so inline text stays on one line.
+const steps = css({
+  display: "grid",
+  gap: "16px",
+  fontSize: "15px",
+  counterReset: "step",
+  "& > li": {
+    counterIncrement: "step",
+    display: "grid",
+    gridTemplateColumns: "26px minmax(0, 1fr)",
+    gap: "10px",
+    alignItems: "start",
+  },
+  "& > li::before": {
+    content: "counter(step)",
+    display: "grid",
+    placeItems: "center",
+    width: "24px",
+    height: "24px",
+    borderRadius: "full",
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "focus",
+    background: "rgba(138,164,255,0.16)",
+  },
+  "& > li > div": { display: "grid", gap: "10px", minWidth: 0 },
+});
+
+function SignIn({ url, provider }: { url: string; provider: Provider }) {
+  return (
+    <div>
+      <a
+        className={button({ variant: "primary" })}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <ProviderIcon provider={provider} size={16} />
+        Open {provider === "claude" ? "Claude" : "OpenAI"} sign-in
+        <ExternalLink size={14} aria-hidden="true" />
+      </a>
+    </div>
+  );
+}
+
+/** What the failed redirect page looks like, so people know which address to copy. */
+function AddressBar() {
+  return (
+    <div
+      aria-hidden="true"
+      className={css({
+        display: "grid",
+        gap: "6px",
+        padding: "10px 12px",
+        borderRadius: "10px",
+        background: "raised",
+        border: "1px solid token(colors.edge)",
+        fontSize: "13px",
+      })}
+    >
+      <span
+        className={css({
+          fontFamily: "mono",
+          padding: "6px 10px",
+          borderRadius: "7px",
+          background: "canvas",
+          color: "fg",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          outline: "2px solid token(colors.focus)",
+        })}
+      >
+        localhost:54545/callback?code=Xy7…&amp;state=…
+      </span>
+      <span className={css({ color: "dim" })}>
+        This site can't be reached ← copy the address above, not this message
+      </span>
+    </div>
+  );
+}
 
 const pending = (status?: Login["status"]) =>
   status === "starting" || status === "waiting" || status === "connecting";
@@ -98,18 +179,7 @@ export default function ConnectAccount() {
   }
 
   return (
-    <div
-      className={css({
-        display: "grid",
-        gap: "16px",
-        minWidth: 0,
-        paddingTop: "22px",
-        borderTop: "1px solid token(colors.line)",
-      })}
-    >
-      <h3 className={css({ fontSize: "17px", fontWeight: 600 })}>
-        Connect an account
-      </h3>
+    <div className={css({ display: "grid", gap: "16px", minWidth: 0 })}>
       {!id && (
         <>
           <Segmented
@@ -121,14 +191,18 @@ export default function ConnectAccount() {
               label: (
                 <>
                   <ProviderIcon provider={value} size={16} />
-                  {providerName(value)}
+                  {value === "claude" ? "Claude" : "ChatGPT"}
                 </>
               ),
             }))}
           />
           <p className={caption}>
-            Add a shared {providerName(provider)} account. Sign in on the
-            provider's page, then finish here.
+            {provider === "claude"
+              ? "Use the Claude account you pay for (Pro or Max)."
+              : "Use the ChatGPT account you pay for (Plus, Pro, or Team)."}{" "}
+            You sign in on {provider === "claude" ? "Claude's" : "OpenAI's"} own
+            page, so Pool never sees your password. The login stays on the Pool
+            server and the whole team can use the plan.
           </p>
           <div>
             <button
@@ -136,9 +210,10 @@ export default function ConnectAccount() {
               disabled={start.isPending}
               onClick={() => start.mutate()}
             >
+              <ProviderIcon provider={provider} size={16} />
               {start.isPending
                 ? "Starting login…"
-                : `Connect ${providerName(provider)}`}
+                : `Connect ${provider === "claude" ? "Claude" : "ChatGPT"}`}
             </button>
           </div>
         </>
@@ -169,13 +244,6 @@ export default function ConnectAccount() {
             {login.status === "connecting" && (
               <Loading label="Connecting account…" />
             )}
-            {login.status === "waiting" && (
-              <p className={caption}>
-                {login.provider === "claude"
-                  ? "Sign in to Claude, then paste the redirect URL below."
-                  : "Enter this device code on OpenAI's page. This page updates after approval."}
-              </p>
-            )}
             {login.status === "connected" && (
               <p className={css({ color: "ok" })}>
                 Account saved. Pool loads it automatically. Quota updates within
@@ -196,21 +264,59 @@ export default function ConnectAccount() {
           </div>
           {login.status === "waiting" && (
             <>
-              {login.user_code && (
-                <CodeBlock label="Device code" value={login.user_code} />
-              )}
-              {login.url && (
-                <div>
-                  <a
-                    className={button({ variant: "primary" })}
-                    href={login.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Open {providerName(login.provider)} sign-in{" "}
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
-                </div>
+              {login.provider === "codex" ? (
+                <ol className={steps}>
+                  <li>
+                    <div>
+                      <span>Copy this code.</span>
+                      {login.user_code && (
+                        <CodeBlock
+                          label="Device code"
+                          value={login.user_code}
+                        />
+                      )}
+                    </div>
+                  </li>
+                  <li>
+                    <div>
+                      <span>
+                        Open OpenAI's page, sign in, and paste the code.
+                      </span>
+                      {login.url && <SignIn url={login.url} provider="codex" />}
+                    </div>
+                  </li>
+                  <li>
+                    <div>Approve. This page notices by itself.</div>
+                  </li>
+                </ol>
+              ) : (
+                <ol className={steps}>
+                  <li>
+                    <div>
+                      <span>
+                        Sign in on Claude's page and click <b>Authorize</b>.
+                      </span>
+                      {login.url && (
+                        <SignIn url={login.url} provider="claude" />
+                      )}
+                    </div>
+                  </li>
+                  <li>
+                    <div>
+                      <span>
+                        Claude then sends you to a page that won't load. That's
+                        expected. The login code is in that page's address.
+                      </span>
+                      <AddressBar />
+                    </div>
+                  </li>
+                  <li>
+                    <div>
+                      Copy that whole address from the address bar and paste it
+                      below.
+                    </div>
+                  </li>
+                </ol>
               )}
               {login.provider === "claude" && (
                 <form
@@ -221,15 +327,10 @@ export default function ConnectAccount() {
                   className={css({ display: "grid", gap: "10px" })}
                 >
                   <label className={label} htmlFor="account-callback">
-                    Full redirect URL
+                    Address from the page that didn't load
                   </label>
-                  <p id="callback-help" className={caption}>
-                    After authorizing, the localhost page may fail to load. Copy
-                    its full URL from the address bar and paste it here.
-                  </p>
                   <input
                     id="account-callback"
-                    aria-describedby="callback-help"
                     className={field()}
                     type="url"
                     autoComplete="off"
@@ -250,12 +351,12 @@ export default function ConnectAccount() {
                 </form>
               )}
               <p className={caption}>
-                Expires at{" "}
+                This login works until{" "}
                 {new Date(login.expires_at * 1000).toLocaleTimeString([], {
                   hour: "numeric",
                   minute: "2-digit",
                 })}
-                . Keep passwords and MFA codes on the provider's page.
+                .
               </p>
             </>
           )}
