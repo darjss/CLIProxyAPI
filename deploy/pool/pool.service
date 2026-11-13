@@ -6,7 +6,10 @@ After=network.target
 Type=simple
 WorkingDirectory=%h/.local/share/pool
 EnvironmentFile=%h/.config/pool/runtime.env
-ExecStart=%h/.local/share/pool/bin/pool --config %h/.config/pool/config.yaml --database %h/.local/share/pool/data/pool.db --web-dir %h/.local/share/pool/web
+ExecStart=%h/.local/share/pool/bin/pool --config %h/.config/pool/config.yaml --database %h/.local/share/pool/data/pool.db --web-dir %h/.local/share/pool/web --pid-file %t/pool.pid
+# Reload starts the binary now on disk on the same socket; the old process drains.
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile=%t/pool.pid
 Restart=on-failure
 RestartSec=3
 UMask=0077

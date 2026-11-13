@@ -50,6 +50,9 @@ type Server struct {
 	listenerMu      sync.Mutex
 	muxBaseListener net.Listener
 
+	// listen opens the API listener; nil means net.Listen.
+	listen func(network, addr string) (net.Listener, error)
+
 	// muxHTTPListener receives HTTP connections selected by the multiplexer.
 	muxHTTPListener *muxListener
 
@@ -170,6 +173,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		wsRoutes:                     make(map[string]struct{}),
 		pluginHost:                   optionState.pluginHost,
 		exampleAPIKeySafeModeEnabled: optionState.exampleAPIKeySafeMode,
+		listen:                       optionState.listen,
 	}
 
 	// Add middleware
@@ -306,7 +310,11 @@ func (s *Server) Start() error {
 	}
 
 	addr := s.server.Addr
-	listener, errListen := net.Listen("tcp", addr)
+	listen := net.Listen
+	if s.listen != nil {
+		listen = s.listen
+	}
+	listener, errListen := listen("tcp", addr)
 	if errListen != nil {
 		return fmt.Errorf("failed to start HTTP server: %v", errListen)
 	}
