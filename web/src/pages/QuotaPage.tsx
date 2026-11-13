@@ -812,10 +812,6 @@ function AccountMenu({ account }: { account: QuotaAccount }) {
   );
 }
 
-// Bigger plans get the louder color, so $200 accounts stand out in the list.
-const planColor = (price = 0) =>
-  price >= 200 ? palette.blue : price >= 100 ? palette.teal : palette.gray;
-
 function AccountRows({
   accounts,
   now,
@@ -862,14 +858,17 @@ function AccountRows({
             >
               <span
                 className={css({
-                  display: "flex",
+                  display: "grid",
+                  gridTemplateColumns: "15px minmax(0, 1fr)",
+                  columnGap: "8px",
+                  rowGap: "2px",
                   alignItems: "center",
-                  gap: "8px",
                   maxWidth: "100%",
                 })}
               >
                 <ProviderIcon provider={account.provider} size={15} />
                 <span
+                  title={account.email || undefined}
                   className={css({
                     fontSize: "15px",
                     fontWeight: 600,
@@ -882,6 +881,27 @@ function AccountRows({
                   {account.email ||
                     account.provider + "-" + account.id.slice(0, 6)}
                 </span>
+                {account.plan && (
+                  <span
+                    className={css({
+                      gridColumn: "2",
+                      fontSize: "13px",
+                      color: "dim",
+                      fontVariantNumeric: "tabular-nums",
+                    })}
+                  >
+                    {account.plan.name}
+                    {account.plan.price ? (
+                      <>
+                        {" · "}
+                        <span className={css({ color: "fg" })}>
+                          ${account.plan.price}
+                        </span>
+                        /mo
+                      </>
+                    ) : null}
+                  </span>
+                )}
               </span>
               <div
                 className={css({
@@ -890,12 +910,6 @@ function AccountRows({
                   flexWrap: "wrap",
                 })}
               >
-                {account.plan && (
-                  <Chip color={planColor(account.plan.price)}>
-                    {account.plan.name}
-                    {account.plan.price ? ` · $${account.plan.price}` : ""}
-                  </Chip>
-                )}
                 <span
                   title={
                     [

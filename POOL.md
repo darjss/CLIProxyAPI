@@ -235,6 +235,20 @@ loginctl enable-linger "$USER"
 Enabling lingering lets user services start after boot without an interactive
 login. Existing tunnels and other Access applications do not need changes.
 
+To ship a new build, replace the binary and web assets, then reload:
+
+```sh
+systemctl --user reload pool.service
+```
+
+Reload sends SIGHUP. Pool starts the binary now on disk with the same listening
+socket, using [tableflip](https://github.com/cloudflare/tableflip). Once the new
+process listens, the old one closes `kv.db` so the new one can open it, stops
+token refresh and quota polling, and lets open requests finish for up to
+`server.shutdown-timeout` seconds. That defaults to 600 in Pool. No connection
+is refused and no stream is cut. `restart` still works, but it cuts every open
+stream.
+
 ## Checks
 
 ```sh

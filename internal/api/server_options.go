@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"path/filepath"
 	"time"
 
@@ -27,6 +28,7 @@ type serverOptionConfig struct {
 	pluginHost            *pluginhost.Host
 	configReloadHook      func(context.Context, *config.Config)
 	exampleAPIKeySafeMode bool
+	listen                func(network, addr string) (net.Listener, error)
 }
 
 // ServerOption customises HTTP server construction.
@@ -57,6 +59,14 @@ func effectiveSDKConfig(cfg *config.Config) *config.SDKConfig {
 func WithMiddleware(mw ...gin.HandlerFunc) ServerOption {
 	return func(cfg *serverOptionConfig) {
 		cfg.extraMiddleware = append(cfg.extraMiddleware, mw...)
+	}
+}
+
+// WithListenFunc replaces net.Listen for the API listener, for example to
+// inherit the socket from a previous process during a graceful upgrade.
+func WithListenFunc(fn func(network, addr string) (net.Listener, error)) ServerOption {
+	return func(cfg *serverOptionConfig) {
+		cfg.listen = fn
 	}
 }
 

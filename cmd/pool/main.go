@@ -6,17 +6,21 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/cloudflare/tableflip"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/kvstore"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/pool"
 	_ "github.com/router-for-me/CLIProxyAPI/v8/internal/translator"
@@ -48,6 +52,7 @@ func run() error {
 	audience := flag.String("access-audience", os.Getenv("POOL_ACCESS_AUDIENCE"), "Cloudflare Access application audience")
 	admins := flag.String("admins", os.Getenv("POOL_ADMINS"), "Comma-separated verified Access admin emails")
 	devGitHubID := flag.Int64("dev-github-id", 0, "GitHub user ID shown for the development identity")
+	pidFile := flag.String("pid-file", "", "Write the serving process ID here; systemd follows it across SIGHUP upgrades")
 	flag.Parse()
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
@@ -67,6 +72,47 @@ func run() error {
 	cfg.RemoteManagement.SecretKey = ""
 	cfg.APIKeys = nil
 	cfg.Discovery.Enabled = false
+	// Let open streams finish when an upgrade or stop retires this process.
+	if cfg.ShutdownTimeoutSeconds == 0 {
+		cfg.ShutdownTimeoutSeconds = 600
+	}
+	// SIGHUP starts the new binary on the same socket. Once it serves, this
+	// process stops background work and drains its open requests.
+	upgrader, err := tableflip.New(tableflip.Options{PIDFile: *pidFile})
+	if err != nil {
+		return fmt.Errorf("prepare graceful upgrades: %w", err)
+	}
+	defer upgrader.Stop()
+	go func() {
+		hup := make(chan os.Signal, 1)
+		signal.Notify(hup, syscall.SIGHUP)
+		for range hup {
+			log.Info("pool: upgrading")
+			// bbolt locks kv.db, so hand it over first. Until this process exits,
+			// its session pins fall back to memory.
+			if errKV := kvstore.ShutdownLocal(); errKV != nil {
+				log.WithError(errKV).Warn("pool: release kv store")
+			}
+			if errUpgrade := upgrader.Upgrade(); errUpgrade != nil {
+				log.WithError(errUpgrade).Error("pool: upgrade failed; this process keeps serving")
+				if !cfg.KVStore.Disabled {
+					_ = kvstore.ConfigureLocal(true, cfg.EffectiveKVStorePath())
+				}
+			}
+		}
+	}()
+	var ready sync.Once
+	listen := func(network, addr string) (net.Listener, error) {
+		ln, errListen := upgrader.Listen(network, addr)
+		if errListen == nil {
+			ready.Do(func() {
+				if errReady := upgrader.Ready(); errReady != nil {
+					log.WithError(errReady).Error("pool: signal upgrade readiness")
+				}
+			})
+		}
+		return ln, errListen
+	}
 	store, err := pool.Open(*database)
 	if err != nil {
 		return err
@@ -98,6 +144,14 @@ func run() error {
 	usage.RegisterNamedPlugin(pool.ProviderID, store)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	go func() {
+		select {
+		case <-upgrader.Exit():
+			log.Info("pool: new process is serving; draining this one")
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	portal.Logins = pool.NewAccountLogins(ctx, cfg)
 	prices := make(chan struct{})
 	go func() {
@@ -112,6 +166,7 @@ func run() error {
 		}
 	}()
 	builder := cliproxy.NewBuilder().WithConfig(cfg).WithConfigPath(*configPath).WithServerOptions(
+		api.WithListenFunc(listen),
 		api.WithMiddleware(portal.Guard()),
 		api.WithRouterConfigurator(func(r *gin.Engine, base *handlers.BaseAPIHandler, _ *config.Config) {
 			portal.Quota = pool.NewCollector(store, base.AuthManager)

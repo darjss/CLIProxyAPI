@@ -2,6 +2,8 @@ config-version: 8
 server:
   host: "127.0.0.1"
   port: 8317
+  # Seconds open requests get to finish when a reload or stop retires a process.
+  shutdown-timeout: 600
 oauth:
   auth-dir: "./auths"
 management:

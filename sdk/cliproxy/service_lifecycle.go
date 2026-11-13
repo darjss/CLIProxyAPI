@@ -69,7 +69,12 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 
 	defer func() {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// Leave room for the configured HTTP drain on top of the other shutdown steps.
+		budget := 30 * time.Second
+		if cfg := s.currentConfig(); cfg != nil && cfg.ShutdownTimeoutSeconds > 0 {
+			budget += time.Duration(cfg.ShutdownTimeoutSeconds) * time.Second
+		}
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), budget)
 		defer shutdownCancel()
 		if errShutdown := s.Shutdown(shutdownCtx); errShutdown != nil {
 			log.Errorf("service shutdown returned error: %v", errShutdown)
