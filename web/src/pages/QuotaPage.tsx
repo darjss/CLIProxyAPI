@@ -27,7 +27,6 @@ import {
   when,
 } from "../time";
 import {
-  Chip,
   EmptyState,
   ErrorState,
   Loading,
@@ -812,6 +811,34 @@ function AccountMenu({ account }: { account: QuotaAccount }) {
   );
 }
 
+/** The account's state at a glance: a soft halo when live, a ring when disabled. */
+function StatusDot({
+  color,
+  hollow,
+  title,
+}: {
+  color: string;
+  hollow?: boolean;
+  title: string;
+}) {
+  return (
+    <span
+      role="img"
+      aria-label={title.split("\n")[0]}
+      title={title}
+      className={css({ width: "8px", height: "8px", borderRadius: "full" })}
+      style={
+        hollow
+          ? { boxShadow: `inset 0 0 0 1.5px ${color}` }
+          : {
+              background: color,
+              boxShadow: `0 0 0 3px color-mix(in srgb, ${color} 22%, transparent)`,
+            }
+      }
+    />
+  );
+}
+
 function AccountRows({
   accounts,
   now,
@@ -836,13 +863,18 @@ function AccountRows({
         return (
           <div
             key={account.id}
+            data-disabled={account.disabled || undefined}
             className={css({
               display: "grid",
               gridTemplateColumns:
                 "minmax(220px, 1.2fr) minmax(0, 3fr) 96px 36px",
               gap: "16px 32px",
-              alignItems: "center",
+              // Top-aligned so the email, window labels, and cost share one line.
+              alignItems: "start",
               padding: "18px 0",
+              // A disabled account's numbers are history; the name and menu stay sharp.
+              "&[data-disabled] > :nth-child(2), &[data-disabled] > :nth-child(3)":
+                { opacity: 0.45 },
               borderBottom: "1px solid token(colors.line)",
               _last: { borderBottom: 0, paddingBottom: 0 },
               mdDown: { gridTemplateColumns: "minmax(0, 1fr) auto" },
@@ -851,97 +883,84 @@ function AccountRows({
             <div
               className={css({
                 display: "grid",
-                gap: "8px",
-                justifyItems: "start",
+                gridTemplateColumns: "8px minmax(0, 1fr)",
+                columnGap: "12px",
+                rowGap: "4px",
+                alignItems: "center",
                 minWidth: 0,
+                fontSize: "13px",
+                fontVariantNumeric: "tabular-nums",
               })}
             >
+              <StatusDot
+                color={state.color}
+                hollow={account.disabled}
+                title={[
+                  state.label,
+                  state.title,
+                  account.checked_at &&
+                    "Checked " + relative(account.checked_at, now),
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+              />
               <span
+                title={account.email || undefined}
                 className={css({
-                  display: "grid",
-                  gridTemplateColumns: "15px minmax(0, 1fr)",
-                  columnGap: "8px",
-                  rowGap: "2px",
-                  alignItems: "center",
-                  maxWidth: "100%",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  color: "fg",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 })}
               >
-                <ProviderIcon provider={account.provider} size={15} />
-                <span
-                  title={account.email || undefined}
-                  className={css({
-                    fontSize: "15px",
-                    fontWeight: 600,
-                    color: "fg",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  })}
-                >
-                  {account.email ||
-                    account.provider + "-" + account.id.slice(0, 6)}
-                </span>
-                {account.plan && (
-                  <span
-                    className={css({
-                      gridColumn: "2",
-                      fontSize: "13px",
-                      color: "dim",
-                      fontVariantNumeric: "tabular-nums",
-                    })}
-                  >
-                    {account.plan.name}
-                    {account.plan.price ? (
-                      <>
-                        {" · "}
-                        <span className={css({ color: "fg" })}>
-                          ${account.plan.price}
-                        </span>
-                        /mo
-                      </>
-                    ) : null}
-                  </span>
-                )}
+                {account.email ||
+                  account.provider + "-" + account.id.slice(0, 6)}
               </span>
-              <div
-                className={css({
-                  display: "flex",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                })}
-              >
-                <span
-                  title={
-                    [
-                      state.title,
-                      account.checked_at &&
-                        "Checked " + relative(account.checked_at, now),
-                    ]
-                      .filter(Boolean)
-                      .join("\n") || undefined
-                  }
-                >
-                  <Chip color={state.color}>{state.label}</Chip>
+              {(account.plan || (admin && account.free_reset?.left)) && (
+                <span className={css({ gridColumn: "2", color: "dim" })}>
+                  {account.plan?.name}
+                  {account.plan?.price ? (
+                    <>
+                      {" · "}
+                      <span className={css({ color: "fg" })}>
+                        ${account.plan.price}
+                      </span>
+                      /mo
+                    </>
+                  ) : null}
+                  {admin &&
+                    account.free_reset &&
+                    account.free_reset.left > 0 && (
+                      <span
+                        style={{ color: palette.violet }}
+                        title={[
+                          "Free usage resets from the provider. Each one sets this account's limits back to zero.",
+                          account.free_reset.expires &&
+                            "Next one expires " +
+                              numericDateTime(account.free_reset.expires),
+                          account.free_reset.note,
+                        ]
+                          .filter(Boolean)
+                          .join("\n")}
+                      >
+                        {account.plan && " · "}
+                        {account.free_reset.left} free{" "}
+                        {account.free_reset.left === 1 ? "reset" : "resets"}
+                      </span>
+                    )}
                 </span>
-                {admin && account.free_reset && account.free_reset.left > 0 && (
-                  <span
-                    title={[
-                      "Free usage resets from the provider. Each one sets this account's limits back to zero.",
-                      account.free_reset.expires &&
-                        "Next one expires " +
-                          numericDateTime(account.free_reset.expires),
-                      account.free_reset.note,
-                    ]
-                      .filter(Boolean)
-                      .join("\n")}
-                  >
-                    <Chip color={palette.violet}>
-                      {account.free_reset.left} free{" "}
-                      {account.free_reset.left === 1 ? "reset" : "resets"}
-                    </Chip>
-                  </span>
-                )}
-              </div>
+              )}
+              {/* Healthy accounts stay quiet; only trouble gets a line. */}
+              {state.label !== "Active" && (
+                <span
+                  className={css({ gridColumn: "2" })}
+                  style={{ color: state.color }}
+                >
+                  {state.label}
+                </span>
+              )}
             </div>
             {windows.length ? (
               <div
@@ -1033,7 +1052,7 @@ function AccountRows({
                 mdDown: { display: "none" },
               })}
             >
-              <strong className={css({ fontWeight: 600 })}>
+              <strong className={css({ fontWeight: 600, fontSize: "15px" })}>
                 {account.day.requests ? dollars(account.day.cost_micros) : "—"}
               </strong>
               <span className={css({ color: "faint", fontSize: "13px" })}>
@@ -1042,7 +1061,8 @@ function AccountRows({
                   : number.format(account.day.requests) + " requests"}
               </span>
             </div>
-            <div className={css({ justifySelf: "end" })}>
+            {/* Pull the 32px button up so its dots sit on the first text line. */}
+            <div className={css({ justifySelf: "end", marginTop: "-6px" })}>
               {admin && <AccountMenu account={account} />}
             </div>
           </div>
