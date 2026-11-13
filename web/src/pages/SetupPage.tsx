@@ -12,6 +12,7 @@ import {
   PageHeader,
   ProviderIcon,
   Segmented,
+  actions,
   caption,
   card,
   formError,
@@ -37,6 +38,7 @@ type SetupCode = { code: string; command: string; expires_at: number };
 type SetupStatus = {
   status: "waiting" | "installed" | "expired";
   first?: UsageEvent | null;
+  t3?: boolean;
 };
 
 const harnessOrder: HarnessID[] = ["claude", "codex"];
@@ -111,6 +113,7 @@ export default function SetupPage({ onDone }: { onDone?: () => void }) {
           </Step>
         )}
         <ToolSetup first={share ? 2 : 1} />
+        <T3Step number={share ? 5 : 4} />
         {onDone && (
           <div>
             <button className={button({ variant: "primary" })} onClick={onDone}>
@@ -429,6 +432,98 @@ function Works({ harness, event }: { harness: Harness; event: UsageEvent }) {
         </p>
       </div>
     </div>
+  );
+}
+
+/** Creates the one-time command that adds Pool's accounts to T3 Code's Usage page. */
+export function useT3Command() {
+  return useMutation({
+    mutationFn: () =>
+      api<SetupCode>("/setup", {
+        method: "POST",
+        body: JSON.stringify({ harness: "t3", model: "" }),
+      }),
+  });
+}
+
+function T3Step({ number }: { number: number }) {
+  const create = useT3Command();
+  return (
+    <Step number={number} title="Optional: see usage in T3 Code">
+      <p className={caption}>
+        Use T3 Code 0.1.3 or newer? One command adds Pool's Claude and ChatGPT
+        accounts to its Usage page, under Limits. Run it on the computer where
+        you use T3 Code.
+      </p>
+      {create.data ? (
+        <T3Setup command={create.data} />
+      ) : (
+        <div>
+          <button
+            className={button({ variant: "secondary" })}
+            disabled={create.isPending}
+            onClick={() => create.mutate()}
+          >
+            {create.isPending ? "Creating…" : "Get the T3 Code command"}
+          </button>
+        </div>
+      )}
+      {create.isError && (
+        <p role="alert" className={formError}>
+          {create.error.message}
+        </p>
+      )}
+    </Step>
+  );
+}
+
+/** Shows the T3 Code command and waits until it ran and T3 Code read Pool. */
+export function T3Setup({
+  command,
+  onClose,
+}: {
+  command: SetupCode;
+  onClose?: () => void;
+}) {
+  const status = useQuery({
+    queryKey: ["setup", command.code],
+    queryFn: ({ signal }) =>
+      api<SetupStatus>("/setup/" + command.code, { signal }),
+    refetchInterval: (query) =>
+      query.state.data?.t3 || query.state.data?.status === "expired"
+        ? false
+        : 2000,
+  });
+  const state = status.data;
+  return (
+    <>
+      <CodeBlock label="T3 Code setup command" value={command.command} />
+      <Progress
+        done={state?.status === "installed"}
+        active={state?.status !== "expired"}
+      >
+        {state?.status === "expired"
+          ? "That command expired. Get a new one."
+          : state?.status === "installed"
+            ? "Command ran."
+            : "Waiting for the command to run."}
+      </Progress>
+      <Progress done={!!state?.t3} active={state?.status === "installed"}>
+        {state?.t3
+          ? "T3 Code is reading Pool usage. Open Usage, then Limits, to see the accounts."
+          : "Waiting for T3 Code to check in. Open T3 Code if it's closed."}
+      </Progress>
+      {onClose && (
+        <div className={actions}>
+          <button
+            className={button({ variant: state?.t3 ? "primary" : "ghost" })}
+            onClick={onClose}
+          >
+            {state?.t3 ? "Done" : "Close"}
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

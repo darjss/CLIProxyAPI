@@ -267,7 +267,8 @@ script stops.
 The first T3 read sets `owners.t3_at`, and `/pool/api/me` returns `t3`. Until
 then, Accounts asks people who already ran a Claude Code or Codex setup whether
 they use T3 Code and offers the T3-only command (`harness: "t3"`). "No, I don't
-use it" stays dismissed in that browser.
+use it" stays dismissed in that browser. Quick Start always offers the same
+command as its last, optional step.
 
 ## Persistent deployment
 
