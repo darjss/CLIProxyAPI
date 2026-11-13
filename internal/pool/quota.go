@@ -45,6 +45,7 @@ type QuotaAccount struct {
 	AuthStatus    string          `json:"auth_status"`
 	Message       string          `json:"message"`
 	CooldownUntil int64           `json:"cooldown_until"`
+	Priority      int             `json:"priority"`
 	Day           AccountActivity `json:"day"`
 	FreeReset     *FreeReset      `json:"free_reset,omitempty"`
 	Plan          *Plan           `json:"plan,omitempty"`

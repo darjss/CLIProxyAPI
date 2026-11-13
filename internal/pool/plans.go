@@ -15,7 +15,10 @@ import (
 type Plan struct {
 	Name  string `json:"name"`
 	Price int    `json:"price,omitempty"`
-	at    time.Time
+	// Weight is the plan's share of new sessions relative to the base plan.
+	// Claude uses Anthropic's usage multipliers; Codex uses the price ratio.
+	Weight int `json:"weight,omitempty"`
+	at     time.Time
 }
 
 const claudeProfileURL = "https://api.anthropic.com/api/oauth/profile"
@@ -30,11 +33,11 @@ func claudePlan(payload []byte) Plan {
 	case org.Get("organization_type").String() == "claude_team" && org.Get("subscription_status").String() == "active":
 		return Plan{Name: "Team"}
 	case strings.HasSuffix(tier, "claude_max_20x"):
-		return Plan{Name: "Max 20x", Price: 200}
+		return Plan{Name: "Max 20x", Price: 200, Weight: 20}
 	case strings.HasSuffix(tier, "claude_max_5x"):
-		return Plan{Name: "Max 5x", Price: 100}
+		return Plan{Name: "Max 5x", Price: 100, Weight: 5}
 	case account.Get("has_claude_max").Bool():
-		return Plan{Name: "Max"}
+		return Plan{Name: "Max", Weight: 5}
 	case account.Get("has_claude_pro").Bool():
 		return Plan{Name: "Pro", Price: 20}
 	case account.Get("has_claude_max").Exists() && account.Get("has_claude_pro").Exists():
@@ -48,9 +51,9 @@ func codexPlan(a *coreauth.Auth) Plan {
 	plan, _ := a.Metadata["plan_type"].(string)
 	switch strings.ToLower(plan) {
 	case "pro":
-		return Plan{Name: "Pro", Price: 200}
+		return Plan{Name: "Pro", Price: 200, Weight: 10}
 	case "prolite", "pro_lite", "pro-lite":
-		return Plan{Name: "Pro Lite", Price: 100}
+		return Plan{Name: "Pro Lite", Price: 100, Weight: 5}
 	case "plus":
 		return Plan{Name: "Plus", Price: 20}
 	case "team":
@@ -83,7 +86,7 @@ func (q *Collector) updatePlan(ctx context.Context, a *coreauth.Auth) {
 	plan := claudePlan(body)
 	plan.at = time.Now()
 	q.plans.Store(id, plan)
-	log.WithFields(log.Fields{"account": id, "plan": plan.Name}).Info("pool: claude plan")
+	log.Infof("pool: claude plan account=%s plan=%q", id, plan.Name)
 }
 
 // Plan returns the last known plan for a quota account ID.

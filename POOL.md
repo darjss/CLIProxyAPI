@@ -200,6 +200,32 @@ lands on Quick Start.
 
 Usage retention automation remains a subsequent increment.
 
+## Routing
+
+Weekly quota left at a reset is lost, so Pool spends the account that resets
+soonest first. Every minute `pool.Router` sets each account's `priority` from
+its latest quota reading:
+
+| Priority | When |
+|---|---|
+| 10 down to 3 | Weekly reset today (10) through seven days out (3) |
+| 2 | No reading in the last 15 minutes |
+| 1 | A 5-hour window under 10%, or a weekly window under 3% |
+
+New sessions go only to the highest priority that has an available account.
+Inside that tier, `weighted-round-robin` splits them by plan: Claude Max 20x is
+20, Max 5x is 5, Pro is 1, ChatGPT Pro is 10, Pro Lite is 5, Plus is 1. Accounts
+lists rows in this order and marks the current tier "Next up". Pool writes
+`priority` and `weight` into the auth files only when they change.
+
+A session stays on the account it started on, whatever its tier, so the
+provider's prompt cache keeps working. Pool forces `session-affinity: true` with
+`session-affinity-rebind-on: quota`: only a quota or auth error moves a session.
+A transient 5xx retries elsewhere for that request and keeps the binding.
+Bindings live in memory, so on reload the old process writes them to
+`sessions.json` next to the database and the new process loads and deletes it.
+Idle bindings expire after `session-affinity-ttl` (1 hour).
+
 ## Persistent deployment
 
 Example user services are under `deploy/pool/`. They expect the Pool binary at

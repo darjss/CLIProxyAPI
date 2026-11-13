@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -76,6 +78,13 @@ func run() error {
 	if cfg.ShutdownTimeoutSeconds == 0 {
 		cfg.ShutdownTimeoutSeconds = 600
 	}
+	// pool.Router ranks accounts through priority and weight. A session stays on
+	// the account it started on unless that account hits a quota or auth error.
+	cfg.Routing.Strategy = "weighted-round-robin"
+	cfg.Routing.SessionAffinity = true
+	cfg.Routing.SessionAffinityRebindOn = "quota"
+	sessionsPath := filepath.Join(filepath.Dir(*database), "sessions.json")
+	var authManager atomic.Pointer[coreauth.Manager]
 	// SIGHUP starts the new binary on the same socket. Once it serves, this
 	// process stops background work and drains its open requests.
 	upgrader, err := tableflip.New(tableflip.Options{PIDFile: *pidFile})
@@ -92,6 +101,12 @@ func run() error {
 			// its session pins fall back to memory.
 			if errKV := kvstore.ShutdownLocal(); errKV != nil {
 				log.WithError(errKV).Warn("pool: release kv store")
+			}
+			// Session bindings live in memory; hand them to the new process.
+			if m := authManager.Load(); m != nil {
+				if errSave := pool.SaveSessions(sessionsPath, m); errSave != nil {
+					log.WithError(errSave).Warn("pool: save session bindings")
+				}
 			}
 			if errUpgrade := upgrader.Upgrade(); errUpgrade != nil {
 				log.WithError(errUpgrade).Error("pool: upgrade failed; this process keeps serving")
@@ -158,9 +173,11 @@ func run() error {
 		defer close(prices)
 		store.RunPriceSync(ctx)
 	}()
+	var routing sync.WaitGroup
 	defer func() {
 		cancel()
 		<-prices
+		routing.Wait()
 		if portal.Quota != nil {
 			portal.Quota.Wait()
 		}
@@ -171,6 +188,18 @@ func run() error {
 		api.WithRouterConfigurator(func(r *gin.Engine, base *handlers.BaseAPIHandler, _ *config.Config) {
 			portal.Quota = pool.NewCollector(store, base.AuthManager)
 			portal.Quota.Start(ctx)
+			authManager.Store(base.AuthManager)
+			if n, errLoad := pool.LoadSessions(sessionsPath, base.AuthManager); errLoad != nil {
+				log.WithError(errLoad).Warn("pool: load session bindings")
+			} else if n > 0 {
+				log.WithField("sessions", n).Info("pool: kept session bindings from the previous process")
+			}
+			router := &pool.Router{Quota: portal.Quota, Manager: base.AuthManager}
+			routing.Add(1)
+			go func() {
+				defer routing.Done()
+				router.Run(ctx)
+			}()
 			portal.Accounts = func() []pool.Account {
 				out := []pool.Account{}
 				for _, a := range base.AuthManager.List() {
@@ -182,7 +211,8 @@ func run() error {
 					if a.Unavailable && a.NextRetryAfter.After(time.Now()) {
 						cooldown = a.NextRetryAfter.Unix()
 					}
-					out = append(out, pool.Account{ID: a.ID, Provider: a.Provider, Status: string(a.Status), Disabled: a.Disabled, Email: email, Message: a.StatusMessage, CooldownUntil: cooldown})
+					priority, _ := strconv.Atoi(a.Attributes["priority"])
+					out = append(out, pool.Account{ID: a.ID, Provider: a.Provider, Status: string(a.Status), Disabled: a.Disabled, Email: email, Message: a.StatusMessage, CooldownUntil: cooldown, Priority: priority})
 				}
 				return out
 			}

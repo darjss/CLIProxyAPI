@@ -118,6 +118,9 @@ export type QuotaAccount = {
     }[];
   };
   day: { requests: number; cost_micros: number; last_used: number };
+  // Routing tier from pool.Router: 3–10 by weekly reset (soonest highest),
+  // 2 no fresh reading, 1 near a limit.
+  priority: number;
   // Subscription behind the account; price is the monthly list price in USD.
   plan?: { name: string; price?: number };
 };
