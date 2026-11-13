@@ -749,7 +749,7 @@ function AccountRows({
                 >
                   <Chip color={state.color}>{state.label}</Chip>
                 </span>
-                {account.free_reset && account.free_reset.left > 0 && (
+                {admin && account.free_reset && account.free_reset.left > 0 && (
                   <span
                     title={[
                       "Free usage resets from the provider. Each one sets this account's limits back to zero.",

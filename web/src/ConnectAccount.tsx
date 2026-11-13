@@ -6,7 +6,6 @@ import { button, field } from "../styled-system/recipes";
 import { api } from "./api";
 import {
   CodeBlock,
-  ErrorState,
   Loading,
   ProviderIcon,
   Segmented,
@@ -232,6 +231,15 @@ export default function ConnectAccount() {
   });
   const login = session.data;
 
+  // Logins live in server memory, so a restart forgets the one this tab
+  // remembered. Drop it and show the start form instead of an error.
+  useEffect(() => {
+    if (session.isError) {
+      sessionStorage.removeItem(storageKey);
+      setId(null);
+    }
+  }, [session.isError]);
+
   useEffect(() => {
     if (login?.status === "connected") {
       void client.invalidateQueries({ queryKey: ["accounts"] });
@@ -289,22 +297,6 @@ export default function ConnectAccount() {
         </>
       )}
       {id && session.isPending && <Loading label="Loading login…" />}
-      {session.isError && (
-        <>
-          <ErrorState
-            error={session.error}
-            retry={() => void session.refetch()}
-          />
-          <div>
-            <button
-              className={button({ variant: "secondary" })}
-              onClick={reset}
-            >
-              Start a new login
-            </button>
-          </div>
-        </>
-      )}
       {login && (
         <>
           <div aria-live="polite" role="status">

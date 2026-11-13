@@ -179,8 +179,8 @@ served it. Admins use the account's ⋯ menu for two actions:
   and OpenAI gives Codex "rate-limit reset credits". Each one sets the account's
   usage back to zero. Pool reads them with each quota check, from the Claude
   usage endpoint with `cedar_ember=1` and from
-  `chatgpt.com/backend-api/wham/rate-limit-reset-credits`. Accounts shows
-  "N free resets". Spending one posts the claim to
+  `chatgpt.com/backend-api/wham/rate-limit-reset-credits`. Admins see
+  "N free resets" in Accounts, and only admins can spend one. Spending one posts the claim to
   `api.anthropic.com/api/organizations/<org>/reset_rate_limits` or
   `…/rate-limit-reset-credits/consume`, then clears Pool's cooldown for that
   account. The dashboard warns before using one on an account that still has
