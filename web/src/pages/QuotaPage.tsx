@@ -15,7 +15,6 @@ import {
   number,
   type QuotaAccount,
   type QuotaPool,
-  type QuotaSample,
   type QuotaSnapshot,
 } from "../api";
 import ConnectAccount from "../ConnectAccount";
@@ -277,15 +276,6 @@ function windowLabel(window: string, period: number) {
   return window.replaceAll("_", " ");
 }
 
-function samplesFor(accounts: QuotaAccount[], pool: QuotaPool) {
-  return accounts.flatMap((account) =>
-    account.windows.filter(
-      (w) =>
-        w.window === pool.window && w.period_seconds === pool.period_seconds,
-    ),
-  );
-}
-
 function ProviderCard({
   provider,
   pools,
@@ -355,7 +345,6 @@ function ProviderCard({
       {pool ? (
         <PoolSummary
           pool={pool}
-          samples={samplesFor(accounts, pool)}
           view={view}
           now={now}
           domain={domain}
@@ -387,7 +376,6 @@ function ProviderCard({
 
 function PoolSummary({
   pool,
-  samples,
   view,
   now,
   domain,
@@ -396,7 +384,6 @@ function PoolSummary({
   color,
 }: {
   pool: QuotaPool;
-  samples: QuotaSample[];
   view: View;
   now: number;
   domain: [number, number];
@@ -408,9 +395,7 @@ function PoolSummary({
     (point) => point.remaining !== null && point.remaining <= 0,
   );
   const projectionEnd = pool.projected[pool.projected.length - 1]?.at;
-  const refill = samples
-    .filter((sample) => sample.reset_at === pool.next_reset)
-    .reduce((total, sample) => total + (100 - sample.remaining), 0);
+  const refill = pool.refill;
 
   return (
     <>
@@ -444,7 +429,10 @@ function PoolSummary({
           >
             {pool.remaining.toFixed(0)}%
           </strong>
-          <span className={css({ color: "dim", fontSize: "17px" })}>
+          <span
+            className={css({ color: "dim", fontSize: "17px" })}
+            title="100% is one $100 plan: Claude Max or Codex Pro 100"
+          >
             of {pool.capacity.toFixed(0)}%
           </span>
           <span className={css({ color: "dim", fontSize: "17px" })}>

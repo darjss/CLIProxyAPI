@@ -151,10 +151,25 @@ quota responses are not persisted or returned to members.
 
 Snapshots are retained for 14 days. The quota view shows native windows,
 per-account collection status, pooled observations, next reported resets,
-1h/3h/6h burn windows, and half/same/double usage projections. Each account
-contributes 100 account-relative quota points; subscriptions are not assumed to
-have equal token capacity. Only complete observations of the current group are
-plotted. Missing or stale quota is never converted into an empty balance.
+1h/3h/6h burn windows, and half/same/double usage projections. Pool totals are
+in percent of one $100 plan (Claude Max, Codex Pro 100), so each account counts
+by its plan's size for that window, from the providers' multipliers as of
+November 2026:
+
+| Plan | 5-hour | Weekly |
+|---|---|---|
+| Claude Pro | 20% | 20% |
+| Claude Max | 100% | 100% |
+| Claude Ultra (was Max 20x) | 400% | 200% |
+| Codex Plus | 10% | 10% |
+| Codex Pro 100 / 200 / 500 | no window | 100% / 200% / 500% |
+
+An account with an unknown plan counts as 100%. While an account's all-model
+weekly window is used up, its 5-hour window counts as 0, since it cannot serve
+requests. Codex reports its weekly window as `primary` on Pro and `secondary`
+on Plus; Pool pools Codex windows by period. Only complete observations of the
+current group are plotted. Missing or stale quota is never converted into an
+empty balance.
 
 Forecasts require at least two observations, pause on stale/error data, exclude
 reset intervals from burn calculations, and include only the next reported
@@ -164,10 +179,11 @@ They are estimates, not promised capacity. New accounts start without history.
 The **Accounts** page shows each account's email, a state such as "7-day limit
 used · back in 3d" or "Sign-in expired", its requests and cost in the last 24
 hours, and the quota windows. A chip shows the plan and its monthly price, such
-as "Max 20x · $200". For Claude, Pool reads `api.anthropic.com/api/oauth/profile`
-at most every 6 hours, and only the organization's `rate_limit_tier` tells Max 5x
-from Max 20x. Codex plans come from `plan_type` in the auth file: `pro` is $200,
-`prolite` is $100, `plus` is $20. Each event records the upstream account that
+as "Ultra · $200". For Claude, Pool reads `api.anthropic.com/api/oauth/profile`
+at most every 6 hours, and only the organization's `rate_limit_tier` tells Max
+(`claude_max_5x`) from Ultra (`claude_max_20x`). Codex plans come from
+`plan_type` in the auth file: `promax` is Pro 500, `pro` is Pro 200, `prolite`
+is Pro 100, `plus` is $20. Each event records the upstream account that
 served it. Admins use the account's ⋯ menu for these actions:
 
 - **Disable / Enable.** Disabling takes the account out of routing and keeps its
@@ -213,8 +229,9 @@ its latest quota reading:
 | 1 | A 5-hour window under 10%, or a weekly window under 3% |
 
 New sessions go only to the highest priority that has an available account.
-Inside that tier, `weighted-round-robin` splits them by plan: Claude Max 20x is
-20, Max 5x is 5, Pro is 1, ChatGPT Pro is 10, Pro Lite is 5, Plus is 1. Accounts
+Inside that tier, `weighted-round-robin` splits them by the plan's weekly size
+from the table above: Claude Ultra is 200, Max 100, Pro 20; Codex Pro 500 is
+500, Pro 200 is 200, Pro 100 is 100, Plus 10; unknown plans are 100. Accounts
 lists rows in this order and marks the current tier "Next up". Pool writes
 `priority` and `weight` into the auth files only when they change.
 
