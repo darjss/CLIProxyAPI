@@ -46,6 +46,8 @@ var harnesses = map[string]harness{
 				JSON: map[string]any{"env": map[string]any{
 					"ANTHROPIC_BASE_URL": base, "ANTHROPIC_AUTH_TOKEN": token, "ANTHROPIC_MODEL": model,
 					"ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5", "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5", "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-5-5",
+					// Compact at 400k tokens instead of near the full 1M window.
+					"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000",
 				}}}}
 		}},
 	"codex": {Label: "Codex", Install: "npm install -g @openai/codex", Run: "codex", Models: []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"},
