@@ -61,6 +61,7 @@ type routingRuntimeState struct {
 	sessionAffinityTTL       time.Duration
 	sessionAffinitySubagents bool
 	sessionAffinityRebindOn  string
+	sessionAffinityFollow    bool
 }
 
 func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
@@ -99,6 +100,7 @@ func normalizedRoutingRuntimeState(cfg *config.Config) routingRuntimeState {
 		case coreauth.SessionAffinityRebindOnNever:
 			state.sessionAffinityRebindOn = coreauth.SessionAffinityRebindOnNever
 		}
+		state.sessionAffinityFollow = cfg.Routing.SessionAffinityFollowPriority
 	}
 	return state
 }
@@ -128,6 +130,7 @@ func newRoutingSelectorWithExisting(state routingRuntimeState, existing coreauth
 			TTL:              state.sessionAffinityTTL,
 			SubagentAffinity: &subagents,
 			RebindOn:         state.sessionAffinityRebindOn,
+			FollowPriority:   state.sessionAffinityFollow,
 		})
 	}
 	return selector

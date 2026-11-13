@@ -235,10 +235,14 @@ from the table above: Claude Ultra is 200, Max 100, Pro 20; Codex Pro 500 is
 lists rows in this order and marks the current tier "Next up". Pool writes
 `priority` and `weight` into the auth files only when they change.
 
-A session stays on the account it started on, whatever its tier, so the
-provider's prompt cache keeps working. Pool forces `session-affinity: true` with
-`session-affinity-rebind-on: quota`: only a quota or auth error moves a session.
-A transient 5xx retries elsewhere for that request and keeps the binding.
+A session stays on the account it started on so the provider's prompt cache
+keeps working. Pool forces `session-affinity: true` with
+`session-affinity-rebind-on: quota` and `session-affinity-follow-priority: true`.
+A quota or auth error moves a session, and so does a higher tier gaining an
+available account. The move costs one prompt cache write on the new account,
+much less than weekly quota lost at a reset. Without it, long sessions stayed on
+a later-reset account while the soonest-reset one expired unused. A transient 5xx
+retries elsewhere for that request and keeps the binding.
 Bindings live in memory, so on reload the old process writes them to
 `sessions.json` next to the database and the new process loads and deletes it.
 Idle bindings expire after `session-affinity-ttl` (1 hour).
