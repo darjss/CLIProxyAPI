@@ -9,6 +9,8 @@ export type Me = {
   development: boolean;
   // Fractions of the tier's daily and weekly cap; absent when uncapped.
   limit?: { tier: Tier; day?: number; week?: number };
+  // True once T3 Code has read Pool usage with one of this member's tokens.
+  t3?: boolean;
 };
 export type Member = Person & { id: string; tier: Tier; tokens: number };
 export type Token = {
