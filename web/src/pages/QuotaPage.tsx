@@ -848,6 +848,16 @@ function AccountRows({
   now: number;
   admin: boolean;
 }) {
+  // pool.Router puts the soonest weekly reset in the highest tier (3 and up);
+  // new sessions start there. Rows follow that drain order.
+  const live = accounts.filter((a) => !a.disabled);
+  const top = Math.max(0, ...live.map((a) => a.priority));
+  const ordered = [...accounts].sort(
+    (a, b) =>
+      Number(a.disabled) - Number(b.disabled) ||
+      b.priority - a.priority ||
+      a.email.localeCompare(b.email),
+  );
   return (
     <div
       className={css({
@@ -855,8 +865,9 @@ function AccountRows({
         borderTop: "1px solid token(colors.line)",
       })}
     >
-      {accounts.map((account) => {
+      {ordered.map((account) => {
         const state = accountState(account, now);
+        const next = top >= 3 && !account.disabled && account.priority === top;
         const windows = [...account.windows].sort(
           (a, b) => b.period_seconds - a.period_seconds,
         );
@@ -918,7 +929,9 @@ function AccountRows({
                 {account.email ||
                   account.provider + "-" + account.id.slice(0, 6)}
               </span>
-              {(account.plan || (admin && account.free_reset?.left)) && (
+              {(account.plan ||
+                next ||
+                (admin && account.free_reset?.left)) && (
                 <span className={css({ gridColumn: "2", color: "dim" })}>
                   {account.plan?.name}
                   {account.plan?.price ? (
@@ -930,6 +943,14 @@ function AccountRows({
                       /mo
                     </>
                   ) : null}
+                  {next && (
+                    <span
+                      style={{ color: palette.blue }}
+                      title="New sessions start here: its weekly quota resets soonest, so it's spent first. Running sessions stay on their account."
+                    >
+                      {account.plan && " · "}Next up
+                    </span>
+                  )}
                   {admin &&
                     account.free_reset &&
                     account.free_reset.left > 0 && (

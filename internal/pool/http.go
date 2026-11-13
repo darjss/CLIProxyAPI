@@ -23,6 +23,8 @@ type Account struct {
 	Message  string `json:"message"`
 	// CooldownUntil is when Pool retries an account it blocked after an upstream error.
 	CooldownUntil int64 `json:"cooldown_until"`
+	// Priority is the routing tier pool.Router set; new sessions go to the highest one.
+	Priority int `json:"priority"`
 }
 
 // Portal owns routes independently of the privileged management API.
@@ -239,6 +241,7 @@ func (p *Portal) Register(r *gin.Engine) {
 			a := info[accounts[i].ID]
 			accounts[i].Email, accounts[i].Disabled, accounts[i].Day = a.Email, a.Disabled, activity[a.ID]
 			accounts[i].AuthStatus, accounts[i].Message, accounts[i].CooldownUntil = a.Status, a.Message, a.CooldownUntil
+			accounts[i].Priority = a.Priority
 			accounts[i].Plan = p.Quota.Plan(accounts[i].ID)
 			if member(c).Admin {
 				accounts[i].FreeReset = p.Quota.FreeReset(accounts[i].ID)
