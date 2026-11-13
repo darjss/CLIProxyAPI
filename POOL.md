@@ -180,10 +180,12 @@ served it. Admins use the account's ⋯ menu for two actions:
   usage back to zero. Pool reads them with each quota check, from the Claude
   usage endpoint with `cedar_ember=1` and from
   `chatgpt.com/backend-api/wham/rate-limit-reset-credits`. Admins see
-  "N free resets" in Accounts, and only admins can spend one. Spending one posts the claim to
-  `api.anthropic.com/api/organizations/<org>/reset_rate_limits` or
-  `…/rate-limit-reset-credits/consume`, then clears Pool's cooldown for that
-  account. The dashboard warns before using one on an account that still has
+  "N free resets" in Accounts, and only admins can spend one. The ⋯ menu opens
+  a list of the account's grants or credits, each with what it clears and when
+  it expires, and the admin picks one. Spending it posts that `grant_id` to
+  `api.anthropic.com/api/organizations/<org>/reset_rate_limits` or that
+  `credit_id` to `…/rate-limit-reset-credits/consume`, then clears Pool's
+  cooldown for that account. The dashboard warns before using one on an account that still has
   quota, since that wastes it. The contracts follow
   router-for-me/Cli-Proxy-API-Management-Center.
 

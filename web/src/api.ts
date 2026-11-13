@@ -105,6 +105,17 @@ export type QuotaAccount = {
     usable: boolean;
     expires?: number;
     note?: string;
+    // One per Claude grant or Codex credit; the admin picks which to spend.
+    options?: {
+      id: string;
+      label: string;
+      detail?: string;
+      clears?: string[];
+      left: number;
+      expires?: number;
+      usable: boolean;
+      note?: string;
+    }[];
   };
   day: { requests: number; cost_micros: number; last_used: number };
 };

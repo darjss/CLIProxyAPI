@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/MoeForge/moego/ojson"
@@ -23,10 +25,51 @@ import (
 type FreeReset struct {
 	Left int `json:"left"`
 	// Usable reports whether spending one now would clear a limit.
-	Usable  bool   `json:"usable"`
-	Expires int64  `json:"expires,omitempty"`
-	Note    string `json:"note,omitempty"`
-	grant   string
+	Usable  bool          `json:"usable"`
+	Expires int64         `json:"expires,omitempty"`
+	Note    string        `json:"note,omitempty"`
+	Options []ResetOption `json:"options,omitempty"`
+}
+
+// ResetOption is one Claude grant or one Codex credit the admin can pick.
+type ResetOption struct {
+	ID      string   `json:"id"`
+	Label   string   `json:"label"`
+	Detail  string   `json:"detail,omitempty"`
+	Clears  []string `json:"clears,omitempty"`
+	Left    int      `json:"left"`
+	Expires int64    `json:"expires,omitempty"`
+	Usable  bool     `json:"usable"`
+	Note    string   `json:"note,omitempty"`
+}
+
+// label trims provider display text to one short line.
+func label(v ojson.Result, fallback string) string {
+	s := strings.Join(strings.Fields(v.String()), " ")
+	if s == "" {
+		return fallback
+	}
+	if len(s) > 120 {
+		s = s[:120]
+	}
+	return s
+}
+
+func unix(v ojson.Result) int64 {
+	if t, err := time.Parse(time.RFC3339, v.String()); err == nil {
+		return t.Unix()
+	}
+	return 0
+}
+
+// add appends an option and keeps the account-level summary in step.
+func (r *FreeReset) add(o ResetOption) {
+	r.Options = append(r.Options, o)
+	r.Left += o.Left
+	r.Usable = r.Usable || o.Usable
+	if o.Expires != 0 && (r.Expires == 0 || o.Expires < r.Expires) {
+		r.Expires = o.Expires
+	}
 }
 
 const (
@@ -70,16 +113,37 @@ func claudeFreeReset(payload []byte) *FreeReset {
 		if !resetGrantID.MatchString(id) || left <= 0 {
 			return true
 		}
-		r.Left += left
-		usable := g.Get("usable_now").Bool() && !g.Get("paused").Bool() && (atLimit || g.Get("use_requires_limit").Exists() && !g.Get("use_requires_limit").Bool())
-		if usable && (r.grant == "" || id == next) {
-			r.grant, r.Usable = id, true
+		o := ResetOption{ID: id, Left: left, Expires: unix(g.Get("ends_at")),
+			Label: label(g.Get("label"), map[string]string{"weekly": "Weekly reset", "session": "5-hour reset", "full": "Full reset"}[g.Get("type").String()])}
+		if o.Label == "" {
+			o.Label = "Usage reset"
 		}
-		if ends, err := time.Parse(time.RFC3339, g.Get("ends_at").String()); err == nil && (r.Expires == 0 || ends.Unix() < r.Expires) {
-			r.Expires = ends.Unix()
+		g.Get("clears").ForEach(func(_, w ojson.Result) bool {
+			if name := map[string]string{"five_hour": "5-hour", "seven_day": "7-day"}[w.String()]; name != "" && !slices.Contains(o.Clears, name) {
+				o.Clears = append(o.Clears, name)
+			}
+			return true
+		})
+		// Missing flags count as "not usable", so nothing is spent on a guess.
+		requiresLimit := !g.Get("use_requires_limit").Exists() || g.Get("use_requires_limit").Bool()
+		switch {
+		case g.Get("paused").Bool():
+			o.Note = "Paused by Anthropic"
+		case !g.Get("usable_now").Bool():
+			o.Note = "Not usable yet"
+		case requiresLimit && !atLimit:
+			o.Note = "Usable once a limit is reached"
+		default:
+			o.Usable = true
 		}
+		r.add(o)
 		return true
 	})
+	// Anthropic names the grant it would spend next; list that one first.
+	if i := slices.IndexFunc(r.Options, func(o ResetOption) bool { return o.ID == next }); i > 0 {
+		o := r.Options[i]
+		r.Options = slices.Insert(slices.Delete(r.Options, i, i+1), 0, o)
+	}
 	if r.Left > 0 && !r.Usable {
 		r.Note = "Usable once a limit is reached"
 	}
@@ -101,23 +165,14 @@ func (q *Collector) codexFreeReset(ctx context.Context, a *coreauth.Auth) *FreeR
 	}
 	r := &FreeReset{}
 	ojson.GetBytes(body, "credits").ForEach(func(_, c ojson.Result) bool {
-		if c.Get("reset_type").String() != "codex_rate_limits" || c.Get("status").String() != "available" {
+		id := c.Get("id").String()
+		if id == "" || c.Get("reset_type").String() != "codex_rate_limits" || c.Get("status").String() != "available" {
 			return true
 		}
-		r.Left++
-		if expires, errParse := time.Parse(time.RFC3339, c.Get("expires_at").String()); errParse == nil && (r.Expires == 0 || expires.Unix() < r.Expires) {
-			r.Expires = expires.Unix()
-		}
+		r.add(ResetOption{ID: id, Label: label(c.Get("title"), "Codex reset"), Detail: label(c.Get("description"), ""),
+			Clears: []string{"5-hour", "7-day"}, Left: 1, Usable: true, Expires: unix(c.Get("expires_at"))})
 		return true
 	})
-	// Prefer the server's counts; they can be null, which means "count the credits".
-	for _, key := range []string{"applicable_available_count", "available_count"} {
-		if n := ojson.GetBytes(body, key); n.Type == ojson.Number {
-			r.Left = int(n.Int())
-			break
-		}
-	}
-	r.Usable = r.Left > 0
 	return r
 }
 
@@ -140,16 +195,19 @@ func (q *Collector) FreeReset(id string) *FreeReset {
 	return nil
 }
 
-// UseFreeReset spends one provider reset on an account, then clears Pool's cooldown
-// for it and re-reads quota. It returns the provider's answer.
-func (q *Collector) UseFreeReset(ctx context.Context, authID string) (string, error) {
+// UseFreeReset spends the chosen grant or credit on an account, then clears Pool's
+// cooldown for it and re-reads quota. It returns the provider's answer.
+func (q *Collector) UseFreeReset(ctx context.Context, authID, option string) (string, error) {
 	a, ok := q.manager.GetByID(authID)
 	if !ok {
 		return "", ErrNotFound
 	}
-	r := q.FreeReset(quotaID(authID))
-	if r == nil || !r.Usable {
-		return "", errors.New("no usable free reset for this account right now")
+	usable := false
+	if r := q.FreeReset(quotaID(authID)); r != nil {
+		usable = slices.ContainsFunc(r.Options, func(o ResetOption) bool { return o.ID == option && o.Usable })
+	}
+	if !usable {
+		return "", errors.New("that reset can't be used on this account right now")
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -159,16 +217,17 @@ func (q *Collector) UseFreeReset(ctx context.Context, authID string) (string, er
 	var target string
 	if a.Provider == "claude" {
 		org, _ := a.Metadata["organization_uuid"].(string)
-		if !organizationUUID.MatchString(org) || r.grant == "" {
-			return "", errors.New("this Claude account has no organization or grant to reset")
+		if !organizationUUID.MatchString(org) {
+			return "", errors.New("this Claude account has no organization to reset")
 		}
 		target = "https://api.anthropic.com/api/organizations/" + org + "/reset_rate_limits"
 		_ = payload.Set("program", "cedar_ember")
-		_ = payload.Set("grant_id", r.grant)
+		_ = payload.Set("grant_id", option)
 		_ = payload.Set("request_id", hex.EncodeToString(nonce))
 	} else {
 		target = codexResetCreditsURL + "/consume"
 		_ = payload.Set("redeem_request_id", hex.EncodeToString(nonce))
+		_ = payload.Set("credit_id", option)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload.Bytes()))
 	if err != nil {
