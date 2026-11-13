@@ -35,6 +35,8 @@ type Portal struct {
 	SetDisabled func(ctx context.Context, id string, disabled bool) error
 	// ResetCooldown clears Pool's local retry block on an account; provider quota is unchanged.
 	ResetCooldown func(ctx context.Context, id string) error
+	// DeleteAccount removes an account's auth file and drops it from routing.
+	DeleteAccount func(ctx context.Context, id string) error
 	Quota         *Collector
 	Logins        *AccountLogins
 	GitHub        *GitHub
@@ -237,6 +239,7 @@ func (p *Portal) Register(r *gin.Engine) {
 			a := info[accounts[i].ID]
 			accounts[i].Email, accounts[i].Disabled, accounts[i].Day = a.Email, a.Disabled, activity[a.ID]
 			accounts[i].AuthStatus, accounts[i].Message, accounts[i].CooldownUntil = a.Status, a.Message, a.CooldownUntil
+			accounts[i].Plan = p.Quota.Plan(accounts[i].ID)
 			if member(c).Admin {
 				accounts[i].FreeReset = p.Quota.FreeReset(accounts[i].ID)
 			}
@@ -346,6 +349,12 @@ func (p *Portal) Register(r *gin.Engine) {
 			err = p.SetDisabled(c.Request.Context(), id, c.Param("action") == "disable")
 		case "reset":
 			err = p.ResetCooldown(c.Request.Context(), id)
+		case "delete":
+			if p.DeleteAccount == nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "accounts are not loaded"})
+				return
+			}
+			err = p.DeleteAccount(c.Request.Context(), id)
 		case "free-reset":
 			// Spends one of the account's provider-granted resets; admin only, like the other actions.
 			if p.Quota == nil {

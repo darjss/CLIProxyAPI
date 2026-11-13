@@ -155,6 +155,28 @@ func run() error {
 				}
 				return err
 			}
+			// Same as the management API's auth-file delete: remove the file, then the runtime record.
+			portal.DeleteAccount = func(ctx context.Context, id string) error {
+				current, ok := base.AuthManager.GetByID(id)
+				if !ok {
+					return pool.ErrNotFound
+				}
+				path := current.Attributes["path"]
+				if path == "" {
+					path = current.FileName
+				}
+				if path != "" && !filepath.IsAbs(path) {
+					path = filepath.Join(cfg.AuthDir, path)
+				}
+				if rel, errRel := filepath.Rel(cfg.AuthDir, path); path == "" || errRel != nil || strings.HasPrefix(rel, "..") {
+					return fmt.Errorf("account %s has no auth file under %s", id, cfg.AuthDir)
+				}
+				if errRemove := os.Remove(path); errRemove != nil && !os.IsNotExist(errRemove) {
+					return errRemove
+				}
+				base.AuthManager.Remove(ctx, id)
+				return nil
+			}
 			portal.Register(r)
 			r.GET("/pool/", func(c *gin.Context) {
 				c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://avatars.githubusercontent.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")

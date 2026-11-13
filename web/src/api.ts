@@ -118,6 +118,8 @@ export type QuotaAccount = {
     }[];
   };
   day: { requests: number; cost_micros: number; last_used: number };
+  // Subscription behind the account; price is the monthly list price in USD.
+  plan?: { name: string; price?: number };
 };
 export type QuotaPool = {
   id: string;

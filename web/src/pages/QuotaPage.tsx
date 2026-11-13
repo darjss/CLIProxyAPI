@@ -759,7 +759,7 @@ function AccountMenu({ account }: { account: QuotaAccount }) {
   const client = useQueryClient();
   const [picking, setPicking] = useState(false);
   const act = useMutation({
-    mutationFn: (action: "disable" | "enable" | "reset") =>
+    mutationFn: (action: "disable" | "enable" | "reset" | "delete") =>
       api(`/admin/accounts/${encodeURIComponent(account.id)}/${action}`, {
         method: "POST",
       }),
@@ -793,11 +793,28 @@ function AccountMenu({ account }: { account: QuotaAccount }) {
                 danger: true,
                 onSelect: () => act.mutate("disable"),
               },
+          {
+            label: "Delete",
+            danger: true,
+            onSelect: () => {
+              const name = account.email || "this account";
+              if (
+                window.confirm(
+                  `Delete ${name}? Pool removes its login and stops using it. To add it back, connect it again.`,
+                )
+              )
+                act.mutate("delete");
+            },
+          },
         ]}
       />
     </>
   );
 }
+
+// Bigger plans get the louder color, so $200 accounts stand out in the list.
+const planColor = (price = 0) =>
+  price >= 200 ? palette.blue : price >= 100 ? palette.teal : palette.gray;
 
 function AccountRows({
   accounts,
@@ -873,6 +890,12 @@ function AccountRows({
                   flexWrap: "wrap",
                 })}
               >
+                {account.plan && (
+                  <Chip color={planColor(account.plan.price)}>
+                    {account.plan.name}
+                    {account.plan.price ? ` · $${account.plan.price}` : ""}
+                  </Chip>
+                )}
                 <span
                   title={
                     [
