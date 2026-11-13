@@ -237,7 +237,9 @@ func (p *Portal) Register(r *gin.Engine) {
 			a := info[accounts[i].ID]
 			accounts[i].Email, accounts[i].Disabled, accounts[i].Day = a.Email, a.Disabled, activity[a.ID]
 			accounts[i].AuthStatus, accounts[i].Message, accounts[i].CooldownUntil = a.Status, a.Message, a.CooldownUntil
-			accounts[i].FreeReset = p.Quota.FreeReset(accounts[i].ID)
+			if member(c).Admin {
+				accounts[i].FreeReset = p.Quota.FreeReset(accounts[i].ID)
+			}
 			delete(info, accounts[i].ID)
 		}
 		// The collector skips disabled accounts; list them so they can be enabled again.
@@ -350,7 +352,13 @@ func (p *Portal) Register(r *gin.Engine) {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "quota is not loaded"})
 				return
 			}
-			result, errReset := p.Quota.UseFreeReset(c.Request.Context(), id)
+			var body struct {
+				Option string `json:"option"`
+			}
+			if !bind(c, &body) {
+				return
+			}
+			result, errReset := p.Quota.UseFreeReset(c.Request.Context(), id, body.Option)
 			if errReset != nil {
 				c.JSON(http.StatusBadGateway, gin.H{"error": errReset.Error(), "result": result})
 				return

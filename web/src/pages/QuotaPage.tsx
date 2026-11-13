@@ -37,6 +37,7 @@ import {
   ProviderIcon,
   Segmented,
   Stat,
+  actions,
   card,
   formError,
   palette,
@@ -621,10 +622,144 @@ function accountState(account: QuotaAccount, now: number) {
   return { label: "Active", color: palette.ok };
 }
 
+type ResetOption = NonNullable<
+  NonNullable<QuotaAccount["free_reset"]>["options"]
+>[number];
+
+function resetDetail(option: ResetOption) {
+  return [
+    option.clears?.length && "Clears " + option.clears.join(" and "),
+    option.left > 1 && `${option.left} left`,
+    option.expires && "Expires " + shortDate(option.expires),
+    option.detail,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Pick which Claude grant or Codex credit to spend on an account. */
+function FreeResetDialog({
+  account,
+  onClose,
+}: {
+  account: QuotaAccount;
+  onClose: () => void;
+}) {
+  const client = useQueryClient();
+  const options = account.free_reset?.options ?? [];
+  const [chosen, setChosen] = useState(
+    () => options.find((option) => option.usable)?.id ?? "",
+  );
+  const spend = useMutation({
+    mutationFn: () =>
+      api(`/admin/accounts/${encodeURIComponent(account.id)}/free-reset`, {
+        method: "POST",
+        body: JSON.stringify({ option: chosen }),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["quota"] });
+      onClose();
+    },
+  });
+  const limited = account.windows.some((w) => w.remaining <= 0);
+  return (
+    <Modal title="Use a free reset" onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          spend.mutate();
+        }}
+      >
+        <p className={css({ color: "dim", fontSize: "14px" })}>
+          {account.email || "This account"} goes back to zero usage on the
+          windows the reset clears.
+        </p>
+        <div role="radiogroup" aria-label="Free resets">
+          {options.map((option) => (
+            <label
+              key={option.id}
+              className={css({
+                display: "grid",
+                gridTemplateColumns: "20px minmax(0, 1fr)",
+                alignItems: "center",
+                gap: "12px",
+                padding: "12px 4px",
+                borderTop: "1px solid token(colors.line)",
+                cursor: "pointer",
+                _first: { borderTop: 0 },
+                "&:has(input:disabled)": { cursor: "default", opacity: 0.55 },
+              })}
+            >
+              <input
+                type="radio"
+                name="free-reset"
+                disabled={!option.usable}
+                checked={chosen === option.id}
+                onChange={() => setChosen(option.id)}
+                className={css({
+                  accentColor: "focus",
+                  width: "16px",
+                  height: "16px",
+                })}
+              />
+              <span className={css({ display: "grid", gap: "2px" })}>
+                <strong className={css({ fontWeight: 500, fontSize: "15px" })}>
+                  {option.label}
+                </strong>
+                <span className={css({ color: "dim", fontSize: "13px" })}>
+                  {resetDetail(option)}
+                </span>
+                {option.note && (
+                  <span
+                    className={css({ fontSize: "13px" })}
+                    style={{ color: palette.warn }}
+                  >
+                    {option.note}
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+        </div>
+        {!limited && chosen && (
+          <p
+            className={css({ fontSize: "14px" })}
+            style={{ color: palette.warn }}
+          >
+            This account still has quota left. A reset now throws that unused
+            quota away.
+          </p>
+        )}
+        {spend.error && (
+          <p role="alert" className={formError}>
+            {spend.error.message}
+          </p>
+        )}
+        <div className={actions}>
+          <button
+            type="button"
+            className={button({ variant: "ghost" })}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            className={button({ variant: "primary" })}
+            disabled={!chosen || spend.isPending}
+          >
+            {spend.isPending ? "Resetting…" : "Use reset"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function AccountMenu({ account }: { account: QuotaAccount }) {
   const client = useQueryClient();
+  const [picking, setPicking] = useState(false);
   const act = useMutation({
-    mutationFn: (action: "disable" | "enable" | "reset" | "free-reset") =>
+    mutationFn: (action: "disable" | "enable" | "reset") =>
       api(`/admin/accounts/${encodeURIComponent(account.id)}/${action}`, {
         method: "POST",
       }),
@@ -632,33 +767,35 @@ function AccountMenu({ account }: { account: QuotaAccount }) {
     onError: (error) => window.alert(error.message),
   });
   const free = account.free_reset;
-  const limited = account.windows.some((w) => w.remaining <= 0);
-  const useFree = () => {
-    const name = account.email || "this account";
-    const question = limited
-      ? `Use 1 of ${free?.left} free resets on ${name}? Its usage limits go back to zero.`
-      : `${name} still has quota left. A reset now clears usage it hasn't run out of, which wastes it. Use 1 of ${free?.left} anyway?`;
-    if (window.confirm(question)) act.mutate("free-reset");
-  };
   return (
-    <Menu
-      label={"Actions for " + (account.email || account.id)}
-      items={[
-        ...(free?.usable
-          ? [{ label: `Use free reset (${free.left} left)`, onSelect: useFree }]
-          : []),
-        ...(account.cooldown_until
-          ? [{ label: "Retry now", onSelect: () => act.mutate("reset") }]
-          : []),
-        account.disabled
-          ? { label: "Enable", onSelect: () => act.mutate("enable") }
-          : {
-              label: "Disable",
-              danger: true,
-              onSelect: () => act.mutate("disable"),
-            },
-      ]}
-    />
+    <>
+      {picking && (
+        <FreeResetDialog account={account} onClose={() => setPicking(false)} />
+      )}
+      <Menu
+        label={"Actions for " + (account.email || account.id)}
+        items={[
+          ...(free?.options?.length
+            ? [
+                {
+                  label: `Use free reset… (${free.left} left)`,
+                  onSelect: () => setPicking(true),
+                },
+              ]
+            : []),
+          ...(account.cooldown_until
+            ? [{ label: "Retry now", onSelect: () => act.mutate("reset") }]
+            : []),
+          account.disabled
+            ? { label: "Enable", onSelect: () => act.mutate("enable") }
+            : {
+                label: "Disable",
+                danger: true,
+                onSelect: () => act.mutate("disable"),
+              },
+        ]}
+      />
+    </>
   );
 }
 
