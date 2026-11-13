@@ -208,6 +208,7 @@ CREATE INDEX IF NOT EXISTS quota_snapshot_time ON quota_snapshots(observed_at);`
 		{"events", "client", "TEXT NOT NULL DEFAULT ''"},
 		{"events", "account", "TEXT NOT NULL DEFAULT ''"},
 		{"owners", "tier", "TEXT NOT NULL DEFAULT 'standard'"},
+		{"owners", "t3_at", "INTEGER NOT NULL DEFAULT 0"},
 	} {
 		var exists int
 		if err == nil {
@@ -325,11 +326,34 @@ func (s *Store) listTokens(ctx context.Context, where string, args ...any) ([]To
 	return out, rows.Err()
 }
 
-func (s *Store) Authenticate(ctx context.Context, secret string) (Token, error) {
+// TokenBySecret returns a live token without checking its owner's limits.
+func (s *Store) TokenBySecret(ctx context.Context, secret string) (Token, error) {
 	t, err := scanToken(s.db.QueryRowContext(ctx, `SELECT `+tokenColumns+` FROM tokens WHERE digest=? AND revoked_at=0 AND (expires_at=0 OR expires_at>?)`, digest(secret), s.now().Unix()))
 	if errors.Is(err, sql.ErrNoRows) {
 		return t, ErrNotFound
 	}
+	return t, err
+}
+
+// MarkT3 records that the owner's T3 Code read Pool usage, at most once an hour.
+func (s *Store) MarkT3(ctx context.Context, ownerID string) error {
+	now := s.now().Unix()
+	_, err := s.db.ExecContext(ctx, `UPDATE owners SET t3_at=? WHERE id=? AND t3_at<?`, now, ownerID, now-3600)
+	return err
+}
+
+// UsesT3 reports whether the owner's T3 Code has ever read Pool usage.
+func (s *Store) UsesT3(ctx context.Context, ownerID string) (bool, error) {
+	var at int64
+	err := s.db.QueryRowContext(ctx, `SELECT t3_at FROM owners WHERE id=?`, ownerID).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return at > 0, err
+}
+
+func (s *Store) Authenticate(ctx context.Context, secret string) (Token, error) {
+	t, err := s.TokenBySecret(ctx, secret)
 	if err != nil {
 		return t, err
 	}

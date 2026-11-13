@@ -76,6 +76,7 @@ type Collector struct {
 	pending sync.Map
 	resets  sync.Map // quota ID -> FreeReset, refreshed with each collection
 	plans   sync.Map // quota ID -> Plan
+	usage   sync.Map // quota ID -> last good usage response, served to T3 Code
 	workers chan struct{}
 	wg      sync.WaitGroup
 }
@@ -110,6 +111,15 @@ func (q *Collector) Refresh() {
 	}
 }
 func quotaID(id string) string { return digest(id)[:16] }
+
+// Usage returns the provider's last good usage response for a quota account ID.
+func (q *Collector) Usage(id string) ([]byte, bool) {
+	v, ok := q.usage.Load(id)
+	if !ok {
+		return nil, false
+	}
+	return v.([]byte), true
+}
 
 func (q *Collector) accounts() []*coreauth.Auth {
 	result := []*coreauth.Auth{}
@@ -193,6 +203,7 @@ func (q *Collector) fetch(ctx context.Context, a *coreauth.Auth) ([]QuotaSample,
 		if len(samples) == 0 {
 			return nil, "unsupported_response"
 		}
+		q.usage.Store(quotaID(a.ID), payload)
 		reset := claudeFreeReset(payload)
 		if a.Provider == "codex" {
 			reset = q.codexFreeReset(ctx, a)
