@@ -227,6 +227,10 @@ routing:
   #     keep the binding and return the error (or retry the same credential) instead.
   # Ignored when routing.session-affinity is false.
   session-affinity-rebind-on: "any"
+  # When true, an established session moves to a higher-priority credential as soon as one is
+  # available, paying one prompt cache miss. When false, it keeps its credential until it fails.
+  # Ignored when routing.session-affinity is false.
+  session-affinity-follow-priority: false
 
   # When true, unprefixed model requests only use credentials without a prefix (except when prefix == model name).
   force-model-prefix: false

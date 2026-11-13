@@ -1390,6 +1390,7 @@ type SessionAffinitySelector struct {
 	subagentAffinity  bool
 	rebindOnQuotaOnly bool
 	rebindOnNever     bool
+	followPriority    bool
 }
 
 const (
@@ -1551,6 +1552,8 @@ type SessionAffinityConfig struct {
 	TTL              time.Duration
 	SubagentAffinity *bool
 	RebindOn         string
+	// FollowPriority moves a bound session when a higher-priority credential is available.
+	FollowPriority bool
 }
 
 // NewSessionAffinitySelector creates a new session-aware selector.
@@ -1581,6 +1584,7 @@ func NewSessionAffinitySelectorWithConfig(cfg SessionAffinityConfig) *SessionAff
 		subagentAffinity:  subagentAffinity,
 		rebindOnQuotaOnly: rebindMode == SessionAffinityRebindOnQuota,
 		rebindOnNever:     rebindMode == SessionAffinityRebindOnNever,
+		followPriority:    cfg.FollowPriority,
 	}
 }
 
@@ -1596,7 +1600,8 @@ func (s *SessionAffinitySelector) Trees() *cliproxysession.InMemorySessionTreeSt
 // matcher before retaining the legacy derived/hash fallback behavior.
 //
 // An established binding outranks credential priority: a bound credential that is still
-// available is reused even when a higher-priority credential recovers. Credential priority
+// available is reused even when a higher-priority credential recovers, unless FollowPriority
+// is set, which moves the session to the highest available tier. Credential priority
 // applies to cold bindings, requests without a session, and genuine bound-credential
 // failover, so the fallback selector only ever receives the highest available priority tier.
 //
@@ -1710,10 +1715,27 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		}
 		s.cache.setSessionAliases(authID, bindingProvider, primaryID, keys...)
 	}
+	// promote rebinds a session whose credential sits below the highest available tier.
+	// It returns false when the binding should stay.
+	promote := func(bound *Auth) (*Auth, bool, error) {
+		if !s.followPriority || len(fallbackAuths) == 0 || authPriority(bound) >= authPriority(fallbackAuths[0]) {
+			return nil, false, nil
+		}
+		auth, errPick := s.pickWithAffinityReservation(ctx, provider, model, opts, fallbackAuths, nil, &reservation)
+		if errPick != nil || auth == nil {
+			return auth, true, errPick
+		}
+		bind(auth.ID, true)
+		entry.Infof("session-affinity: higher priority available, rebound | session=%s from=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), bound.ID, auth.ID, provider, model)
+		return auth, true, nil
+	}
 
 	if cachedAuthID, ok := s.cache.GetAndRefresh(cacheKey); ok {
 		for _, auth := range available {
 			if auth.ID == cachedAuthID {
+				if next, moved, errPromote := promote(auth); moved {
+					return next, errPromote
+				}
 				bind(auth.ID, true)
 				entry.Infof("session-affinity: cache hit | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 				return s.pickWithAffinityReservation(ctx, provider, model, opts, available, auth, &reservation)
@@ -1774,6 +1796,9 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 			for _, auth := range available {
 				if auth.ID == cachedAuthID {
 					if !isSubagent || s.subagentAffinity {
+						if next, moved, errPromote := promote(auth); moved {
+							return next, errPromote
+						}
 						bind(auth.ID, true)
 						if isFork {
 							entry.Infof("session-affinity: fork cache hit | session=%s parent=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), truncateSessionID(fallbackID), auth.ID, provider, model)

@@ -79,10 +79,12 @@ func run() error {
 		cfg.ShutdownTimeoutSeconds = 600
 	}
 	// pool.Router ranks accounts through priority and weight. A session stays on
-	// the account it started on unless that account hits a quota or auth error.
+	// its account until that account hits a quota or auth error, or a higher tier
+	// has an available account.
 	cfg.Routing.Strategy = "weighted-round-robin"
 	cfg.Routing.SessionAffinity = true
 	cfg.Routing.SessionAffinityRebindOn = "quota"
+	cfg.Routing.SessionAffinityFollowPriority = true
 	sessionsPath := filepath.Join(filepath.Dir(*database), "sessions.json")
 	var authManager atomic.Pointer[coreauth.Manager]
 	// SIGHUP starts the new binary on the same socket. Once it serves, this

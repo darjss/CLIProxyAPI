@@ -14,6 +14,60 @@ import (
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
 )
 
+func TestManagerSessionAffinityFollowPriorityMovesBindingOnRecovery(t *testing.T) {
+	ctx := context.Background()
+	provider := "affinity-follow-priority"
+	model := "affinity-follow-model"
+	highID, lowID := provider+"-high", provider+"-low"
+
+	manager := NewManager(nil, nil, nil)
+	affinity := NewSessionAffinitySelectorWithConfig(SessionAffinityConfig{
+		Fallback:       &RoundRobinSelector{},
+		TTL:            time.Hour,
+		FollowPriority: true,
+	})
+	defer affinity.Stop()
+	manager.SetSelector(affinity)
+	manager.RegisterExecutor(schedulerTestExecutor{provider: provider})
+	for _, auth := range []*Auth{
+		{ID: highID, Provider: provider, Status: StatusActive, Attributes: map[string]string{"priority": "1"}},
+		{ID: lowID, Provider: provider, Status: StatusActive, Attributes: map[string]string{"priority": "0"}},
+	} {
+		if _, errRegister := manager.Register(WithSkipPersist(ctx), auth); errRegister != nil {
+			t.Fatalf("Register(%s): %v", auth.ID, errRegister)
+		}
+		registry.GetGlobalRegistry().RegisterClient(auth.ID, provider, []*registry.ModelInfo{{ID: model}})
+		t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(auth.ID) })
+	}
+
+	opts := cliproxyexecutor.Options{Metadata: map[string]any{
+		cliproxyexecutor.DerivedSessionIDMetadataKey: "stable-session",
+	}}
+	pick := func() string {
+		t.Helper()
+		auth, _, errPick := manager.pickNext(ctx, provider, model, opts, nil)
+		if errPick != nil || auth == nil {
+			t.Fatalf("pick: %v %v", auth, errPick)
+		}
+		return auth.ID
+	}
+
+	if got := pick(); got != highID {
+		t.Fatalf("cold binding = %q, want %q", got, highID)
+	}
+	manager.MarkResult(ctx, Result{AuthID: highID, Provider: provider, Model: model, Error: &Error{HTTPStatus: http.StatusTooManyRequests, Message: "quota"}})
+	if got := pick(); got != lowID {
+		t.Fatalf("failover binding = %q, want %q", got, lowID)
+	}
+	expireSessionAffinityPriorityModelCooldown(t, manager, highID, model)
+	if got := pick(); got != highID {
+		t.Fatalf("binding after higher-priority recovery = %q, want %q", got, highID)
+	}
+	if got := pick(); got != highID {
+		t.Fatalf("binding after move = %q, want it to stay on %q", got, highID)
+	}
+}
+
 func TestManagerSessionAffinityPreservesBindingAcrossHigherPriorityRecovery(t *testing.T) {
 	for _, testCase := range []struct {
 		name           string

@@ -579,6 +579,12 @@ type RoutingConfig struct {
 	//     keep the binding and return the error (or retry the same credential) instead.
 	// Ignored when SessionAffinity is false.
 	SessionAffinityRebindOn string `yaml:"session-affinity-rebind-on,omitempty" json:"session-affinity-rebind-on,omitempty"`
+
+	// SessionAffinityFollowPriority moves an established session to a higher-priority credential
+	// as soon as one is available, at the cost of one prompt cache miss. When false (default), a
+	// session keeps its credential until that credential fails.
+	// Ignored when SessionAffinity is false.
+	SessionAffinityFollowPriority bool `yaml:"session-affinity-follow-priority,omitempty" json:"session-affinity-follow-priority,omitempty"`
 }
 
 // OAuthModelAlias defines a model ID alias for a specific channel.
