@@ -177,9 +177,14 @@ func (p *Portal) Guard() gin.HandlerFunc {
 
 func (p *Portal) Register(r *gin.Engine) {
 	r.GET("/pool", func(c *gin.Context) { c.Redirect(http.StatusTemporaryRedirect, "/pool/") })
+	p.registerT3(r)
 	g := r.Group("/pool/api")
 	g.GET("/me", func(c *gin.Context) {
 		out := gin.H{"identity": member(c), "development": p.Dev}
+		// t3 is true once any of the member's tokens fed Pool usage into T3 Code.
+		if uses, err := p.Store.UsesT3(c.Request.Context(), member(c).ID); err == nil {
+			out["t3"] = uses
+		}
 		// Members see how much of their tier is used as a fraction, not in dollars.
 		if l, err := p.Store.Limit(c.Request.Context(), member(c).ID); err == nil {
 			limit := gin.H{"tier": l.Tier}
