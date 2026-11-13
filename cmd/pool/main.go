@@ -192,7 +192,7 @@ func run() error {
 			if n, errLoad := pool.LoadSessions(sessionsPath, base.AuthManager); errLoad != nil {
 				log.WithError(errLoad).Warn("pool: load session bindings")
 			} else if n > 0 {
-				log.WithField("sessions", n).Info("pool: kept session bindings from the previous process")
+				log.Infof("pool: kept %d session bindings from the previous process", n)
 			}
 			router := &pool.Router{Quota: portal.Quota, Manager: base.AuthManager}
 			routing.Add(1)

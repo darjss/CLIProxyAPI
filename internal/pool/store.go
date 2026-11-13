@@ -655,10 +655,11 @@ func (s *Store) Events(ctx context.Context, owner string, since int64) ([]Event,
 	return out, rows.Err()
 }
 
-// FirstEvent returns a token's first recorded request, or nil before it makes one.
+// FirstEvent returns a token's first successful request, else its first failed
+// one, or nil before it makes any.
 func (s *Store) FirstEvent(ctx context.Context, tokenID string) (*Event, error) {
 	var e Event
-	err := s.db.QueryRowContext(ctx, `SELECT e.id,t.name,e.provider,e.model,e.timestamp,e.latency_ms,e.failed,e.tokens,e.cost_micros FROM events e JOIN tokens t ON t.id=e.token_id WHERE e.token_id=? ORDER BY e.timestamp,e.id LIMIT 1`, tokenID).Scan(&e.ID, &e.TokenName, &e.Provider, &e.Model, &e.Timestamp, &e.LatencyMs, &e.Failed, &e.Tokens, &e.CostMicros)
+	err := s.db.QueryRowContext(ctx, `SELECT e.id,t.name,e.provider,e.model,e.timestamp,e.latency_ms,e.failed,e.tokens,e.cost_micros FROM events e JOIN tokens t ON t.id=e.token_id WHERE e.token_id=? ORDER BY e.failed,e.timestamp,e.id LIMIT 1`, tokenID).Scan(&e.ID, &e.TokenName, &e.Provider, &e.Model, &e.Timestamp, &e.LatencyMs, &e.Failed, &e.Tokens, &e.CostMicros)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
