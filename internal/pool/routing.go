@@ -55,10 +55,8 @@ func (r *Router) rank(ctx context.Context) {
 			continue
 		}
 		id := quotaID(a.ID)
-		priority, weight := strconv.Itoa(tier(byID[id], now)), "1"
-		if p := r.Quota.Plan(id); p != nil && p.Weight > 0 {
-			weight = strconv.Itoa(p.Weight)
-		}
+		priority := strconv.Itoa(tier(byID[id], now))
+		weight := strconv.Itoa(int(r.Quota.Plan(id).size(604800) * 100))
 		if a.Attributes["priority"] == priority && a.Attributes["weight"] == weight {
 			continue
 		}

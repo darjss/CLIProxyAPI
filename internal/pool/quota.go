@@ -51,6 +51,8 @@ type QuotaAccount struct {
 	Plan          *Plan           `json:"plan,omitempty"`
 }
 
+// QuotaPool sums one window across accounts. Remaining, Capacity and Refill are
+// in percent of one $100 plan, so each account counts by its plan's size.
 type QuotaPool struct {
 	ID          string       `json:"id"`
 	Provider    string       `json:"provider"`
@@ -59,6 +61,7 @@ type QuotaPool struct {
 	Accounts    int          `json:"accounts"`
 	Remaining   float64      `json:"remaining"`
 	Capacity    float64      `json:"capacity"`
+	Refill      float64      `json:"refill"`
 	ObservedAt  int64        `json:"observed_at"`
 	Stale       bool         `json:"stale"`
 	BurnPerHour *float64     `json:"burn_per_hour"`
@@ -334,6 +337,8 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 	}
 	defer func() { _ = rows.Close() }()
 	groups := map[string]map[string][]QuotaSample{}
+	// All-model weekly readings, newest first: a spent one also blocks the 5-hour window.
+	weekly := map[string][]QuotaSample{}
 	for rows.Next() {
 		var v QuotaSample
 		if err = rows.Scan(&v.Account, &v.Provider, &v.Window, &v.Period, &v.Remaining, &v.ResetAt, &v.ObservedAt); err != nil {
@@ -341,6 +346,13 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 		}
 		if active[v.Account] == nil {
 			continue
+		}
+		// Codex reports its weekly window as primary on Pro and secondary on Plus, so the period names it.
+		if v.Provider == "codex" {
+			v.Window = ""
+		}
+		if v.Period == 604800 && (v.Provider == "codex" || v.Window == "seven_day") {
+			weekly[v.Account] = append(weekly[v.Account], v)
 		}
 		id := fmt.Sprintf("%s:%s:%d", v.Provider, v.Window, v.Period)
 		if groups[id] == nil {
@@ -354,15 +366,32 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 	pools := []QuotaPool{}
 	now := q.store.now().Unix()
 	for id, series := range groups {
-		p := QuotaPool{ID: id, Accounts: len(series), Capacity: float64(len(series)) * 100, ObservedAt: now, History: []QuotaPoint{}, Projected: []QuotaPoint{}}
+		p := QuotaPool{ID: id, Accounts: len(series), ObservedAt: now, History: []QuotaPoint{}, Projected: []QuotaPoint{}}
+		// usable is an account's remaining percent at a time, scaled to $100 plans.
+		size := map[string]float64{}
+		usable := func(account string, v QuotaSample, at int64) float64 {
+			if v.Period < 604800 {
+				for _, w := range weekly[account] {
+					if w.ObservedAt <= at {
+						if w.Remaining <= 0 && w.ResetAt > at {
+							return 0
+						}
+						break
+					}
+				}
+			}
+			return v.Remaining * size[account]
+		}
 		rates := map[string]float64{}
 		rateComplete := true
 		for account, values := range series {
 			latest := values[0]
+			size[account] = q.Plan(account).size(latest.Period)
 			p.Provider = latest.Provider
 			p.Window = latest.Window
 			p.Period = latest.Period
-			p.Remaining += latest.Remaining
+			p.Capacity += 100 * size[account]
+			p.Remaining += usable(account, latest, now)
 			active[account].Samples = append(active[account].Samples, latest)
 			if latest.ObservedAt < p.ObservedAt {
 				p.ObservedAt = latest.ObservedAt
@@ -391,6 +420,12 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 				rateComplete = false
 			}
 		}
+		for account, values := range series {
+			if v := values[0]; p.NextReset > 0 && v.ResetAt == p.NextReset {
+				v.Remaining = 100
+				p.Refill += usable(account, v, p.NextReset) - usable(account, values[0], now)
+			}
+		}
 		// Only complete observations of the current pool membership are plotted.
 		buckets := map[int64]map[string]QuotaSample{}
 		for account, values := range series {
@@ -408,8 +443,8 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 			var remaining *float64
 			if len(observations) == p.Accounts {
 				total := 0.0
-				for _, v := range observations {
-					total += v.Remaining
+				for account, v := range observations {
+					total += usable(account, v, v.ObservedAt)
 				}
 				remaining = &total
 			}
@@ -418,8 +453,8 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 		sort.Slice(p.History, func(i, j int) bool { return p.History[i].At < p.History[j].At })
 		if rateComplete && !p.Stale {
 			totalRate := 0.0
-			for _, rate := range rates {
-				totalRate += rate
+			for account, rate := range rates {
+				totalRate += rate * size[account]
 			}
 			p.BurnPerHour = &totalRate
 			horizon := now + 72*3600
@@ -443,12 +478,13 @@ func (q *Collector) Snapshot(ctx context.Context, hours int, factor float64) ([]
 			for _, at := range times {
 				total := 0.0
 				for account, values := range series {
-					latest := values[0]
-					remaining := latest.Remaining - factor*rates[account]*float64(at-now)/3600
-					if latest.ResetAt > now && at >= latest.ResetAt {
-						remaining = 100 - factor*rates[account]*float64(at-latest.ResetAt)/3600
+					v := values[0]
+					v.Remaining = v.Remaining - factor*rates[account]*float64(at-now)/3600
+					if v.ResetAt > now && at >= v.ResetAt {
+						v.Remaining = 100 - factor*rates[account]*float64(at-v.ResetAt)/3600
 					}
-					total += math.Max(0, remaining)
+					v.Remaining = math.Max(0, v.Remaining)
+					total += usable(account, v, at)
 				}
 				v := total
 				p.Projected = append(p.Projected, QuotaPoint{At: at, Remaining: &v})

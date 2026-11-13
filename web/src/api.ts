@@ -134,6 +134,7 @@ export type QuotaPool = {
   accounts: number;
   remaining: number;
   capacity: number;
+  refill: number;
   observed_at: number;
   stale: boolean;
   burn_per_hour: number | null;

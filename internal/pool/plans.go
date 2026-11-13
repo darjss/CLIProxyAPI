@@ -15,10 +15,27 @@ import (
 type Plan struct {
 	Name  string `json:"name"`
 	Price int    `json:"price,omitempty"`
-	// Weight is the plan's share of new sessions relative to the base plan.
-	// Claude uses Anthropic's usage multipliers; Codex uses the price ratio.
-	Weight int `json:"weight,omitempty"`
-	at     time.Time
+	// Session and Weekly size the 5-hour and weekly allowances in percent of the
+	// $100 plan (Claude Max, Codex Pro 100), from the providers' published
+	// multipliers as of November 2026. Zero means unknown.
+	Session int `json:"session,omitempty"`
+	Weekly  int `json:"weekly,omitempty"`
+	at      time.Time
+}
+
+// size is an account's allowance for a window, in $100 plans. Unknown plans count as one.
+func (p *Plan) size(period int64) float64 {
+	n := 0
+	if p != nil {
+		n = p.Weekly
+		if period < 604800 {
+			n = p.Session
+		}
+	}
+	if n == 0 {
+		return 1
+	}
+	return float64(n) / 100
 }
 
 const claudeProfileURL = "https://api.anthropic.com/api/oauth/profile"
@@ -32,14 +49,15 @@ func claudePlan(payload []byte) Plan {
 	switch {
 	case org.Get("organization_type").String() == "claude_team" && org.Get("subscription_status").String() == "active":
 		return Plan{Name: "Team"}
+	// Ultra (the old Max 20x) has 20x Pro per 5 hours but 10x per week.
 	case strings.HasSuffix(tier, "claude_max_20x"):
-		return Plan{Name: "Max 20x", Price: 200, Weight: 20}
+		return Plan{Name: "Ultra", Price: 200, Session: 400, Weekly: 200}
 	case strings.HasSuffix(tier, "claude_max_5x"):
-		return Plan{Name: "Max 5x", Price: 100, Weight: 5}
+		return Plan{Name: "Max", Price: 100, Session: 100, Weekly: 100}
 	case account.Get("has_claude_max").Bool():
-		return Plan{Name: "Max", Weight: 5}
+		return Plan{Name: "Max", Session: 100, Weekly: 100}
 	case account.Get("has_claude_pro").Bool():
-		return Plan{Name: "Pro", Price: 20}
+		return Plan{Name: "Pro", Price: 20, Session: 20, Weekly: 20}
 	case account.Get("has_claude_max").Exists() && account.Get("has_claude_pro").Exists():
 		return Plan{Name: "Free"}
 	}
@@ -50,12 +68,15 @@ func claudePlan(payload []byte) Plan {
 func codexPlan(a *coreauth.Auth) Plan {
 	plan, _ := a.Metadata["plan_type"].(string)
 	switch strings.ToLower(plan) {
+	// Pro plans are 10x, 20x and 50x Plus, with no 5-hour window.
+	case "promax":
+		return Plan{Name: "Pro 500", Price: 500, Session: 500, Weekly: 500}
 	case "pro":
-		return Plan{Name: "Pro", Price: 200, Weight: 10}
+		return Plan{Name: "Pro 200", Price: 200, Session: 200, Weekly: 200}
 	case "prolite", "pro_lite", "pro-lite":
-		return Plan{Name: "Pro Lite", Price: 100, Weight: 5}
+		return Plan{Name: "Pro 100", Price: 100, Session: 100, Weekly: 100}
 	case "plus":
-		return Plan{Name: "Plus", Price: 20}
+		return Plan{Name: "Plus", Price: 20, Session: 10, Weekly: 10}
 	case "team":
 		return Plan{Name: "Team"}
 	case "free":
