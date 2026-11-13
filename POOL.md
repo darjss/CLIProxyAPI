@@ -163,12 +163,18 @@ They are estimates, not promised capacity. New accounts start without history.
 
 The **Accounts** page shows each account's email, a state such as "7-day limit
 used · back in 3d" or "Sign-in expired", its requests and cost in the last 24
-hours, and the quota windows. Each event records the upstream account that
-served it. Admins use the account's ⋯ menu for two actions:
+hours, and the quota windows. A chip shows the plan and its monthly price, such
+as "Max 20x · $200". For Claude, Pool reads `api.anthropic.com/api/oauth/profile`
+at most every 6 hours, and only the organization's `rate_limit_tier` tells Max 5x
+from Max 20x. Codex plans come from `plan_type` in the auth file: `pro` is $200,
+`prolite` is $100, `plus` is $20. Each event records the upstream account that
+served it. Admins use the account's ⋯ menu for these actions:
 
 - **Disable / Enable.** Disabling takes the account out of routing and keeps its
   credentials. The state persists in the auth file, and a disabled account stays
   listed so it can be enabled again.
+- **Delete.** Removes the auth file and drops the account from routing, like
+  upstream's Auth Files delete. Connecting the account again adds it back.
 - **Retry now.** After an upstream 429 or error, CLIProxyAPI pauses the account
   until a retry time, shown as "Paused · retrying in 12m". Retry now calls the
   auth manager's `ResetQuota`, the same reset as upstream's

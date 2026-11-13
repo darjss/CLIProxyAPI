@@ -47,6 +47,7 @@ type QuotaAccount struct {
 	CooldownUntil int64           `json:"cooldown_until"`
 	Day           AccountActivity `json:"day"`
 	FreeReset     *FreeReset      `json:"free_reset,omitempty"`
+	Plan          *Plan           `json:"plan,omitempty"`
 }
 
 type QuotaPool struct {
@@ -73,6 +74,7 @@ type Collector struct {
 	done    chan struct{}
 	pending sync.Map
 	resets  sync.Map // quota ID -> FreeReset, refreshed with each collection
+	plans   sync.Map // quota ID -> Plan
 	workers chan struct{}
 	wg      sync.WaitGroup
 }
@@ -199,6 +201,7 @@ func (q *Collector) fetch(ctx context.Context, a *coreauth.Auth) ([]QuotaSample,
 		} else {
 			q.resets.Delete(quotaID(a.ID))
 		}
+		q.updatePlan(ctx, a)
 		return samples, "ok"
 	}
 	return nil, "sign_in_required"
