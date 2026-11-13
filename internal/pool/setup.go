@@ -31,15 +31,17 @@ type configFile struct {
 }
 
 type harness struct {
-	Label   string   `json:"label"`
-	Install string   `json:"install"`
-	Run     string   `json:"run"`
-	Models  []string `json:"models"`
-	files   func(base, model, token string) []configFile
+	Label   string `json:"label"`
+	Install string `json:"install"`
+	Run     string `json:"run"`
+	// Test is a one-shot prompt that prints a reply, so people can see setup worked.
+	Test   string   `json:"test"`
+	Models []string `json:"models"`
+	files  func(base, model, token string) []configFile
 }
 
 var harnesses = map[string]harness{
-	"claude": {Label: "Claude Code", Install: "curl -fsSL https://claude.ai/install.sh | bash", Run: "claude", Models: []string{"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"},
+	"claude": {Label: "Claude Code", Install: "curl -fsSL https://claude.ai/install.sh | bash", Run: "claude", Test: "claude -p 'Say hi to Pool in five words'", Models: []string{"claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"},
 		files: func(base, model, token string) []configFile {
 			return []configFile{{Path: "~/.claude/settings.json",
 				RemoveEnv: []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"},
@@ -50,7 +52,7 @@ var harnesses = map[string]harness{
 					"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "400000",
 				}}}}
 		}},
-	"codex": {Label: "Codex", Install: "npm install -g @openai/codex", Run: "codex", Models: []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"},
+	"codex": {Label: "Codex", Install: "npm install -g @openai/codex", Run: "codex", Test: "codex exec 'Say hi to Pool in five words'", Models: []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"},
 		files: func(base, model, _ string) []configFile {
 			return []configFile{{Path: "~/.codex/config.toml",
 				TOMLTop: map[string]string{"model_provider": "pool", "model": model},
@@ -83,7 +85,7 @@ func (s *Setups) register(r *gin.Engine, g *gin.RouterGroup) {
 			for _, m := range h.Models {
 				files[m] = h.files(baseURL(c), m, tokenPlaceholder)
 			}
-			out[id] = gin.H{"label": h.Label, "install": h.Install, "run": h.Run, "models": h.Models, "files": files}
+			out[id] = gin.H{"label": h.Label, "install": h.Install, "run": h.Run, "test": h.Test, "models": h.Models, "files": files}
 		}
 		c.JSON(http.StatusOK, out)
 	})
@@ -204,8 +206,14 @@ printf '%%s' '%[2]s' > "$HOME/.config/pool/token"
 POOL_SPEC='%[3]s' python3 - <<'POOL_PY'
 %[4]sPOOL_PY
 command -v %[5]s >/dev/null 2>&1 || echo "%[1]s is not installed yet. Install it with: %[6]s"
-echo "Done. Start %[1]s with: %[5]s"
-`, h.Label, secret, spec, mergeProgram, h.Run, strings.ReplaceAll(h.Install, `"`, `\"`))
+echo
+echo "Pool is set up for %[1]s. Check it with:"
+echo
+echo "  %[7]s"
+echo
+echo "A short reply means it works, and the Quick Start page turns green."
+echo "After that, start %[1]s as usual with: %[5]s"
+`, h.Label, secret, spec, mergeProgram, h.Run, strings.ReplaceAll(h.Install, `"`, `\"`), h.Test)
 }
 
 // mergeProgram applies configFile specs. It backs up each file before writing it with mode 600.

@@ -28,6 +28,7 @@ type Harness = {
   label: string;
   install: string;
   run: string;
+  test: string;
   models: string[];
   files: Record<string, ConfigFile[]>;
 };
@@ -260,7 +261,8 @@ function Install({
     queryFn: ({ signal }) => api<SetupStatus>("/setup/" + code, { signal }),
     enabled: !!code,
     refetchInterval: (query) =>
-      query.state.data?.first || query.state.data?.status === "expired"
+      (query.state.data?.first && !query.state.data.first.failed) ||
+      query.state.data?.status === "expired"
         ? false
         : 2000,
   });
@@ -310,31 +312,121 @@ function Install({
           </div>
         </details>
       </Step>
-      <Step number={first + 1} title="Send your first message">
-        <Progress
-          done={state?.status === "installed"}
-          active={!!code && state?.status !== "expired"}
-        >
-          {state?.status === "expired"
-            ? "That command expired. Get a new one."
-            : state?.status === "installed"
-              ? "Config written."
-              : "Waiting for the setup command to run."}
-        </Progress>
-        <Progress done={!!state?.first} active={state?.status === "installed"}>
-          {state?.first ? (
-            <>
-              Connected. {modelLabels[state.first.model] ?? state.first.model}{" "}
-              answered in {number.format(state.first.latency_ms / 1000)}s.
-            </>
-          ) : (
-            <>
-              Start <code>{harness.run}</code> and say hi.
-            </>
-          )}
-        </Progress>
+      <Step number={first + 1} title="Check that it works">
+        {state?.first && !state.first.failed ? (
+          <Works harness={harness} event={state.first} />
+        ) : (
+          <>
+            <p className={caption}>
+              When the setup command finishes, paste this in the same terminal.
+              You should get a short reply, and this page turns green.
+            </p>
+            <CodeBlock label="Test command" value={harness.test} />
+            <Progress
+              done={state?.status === "installed"}
+              active={!!code && state?.status !== "expired"}
+            >
+              {state?.status === "expired"
+                ? "That setup command expired. Get a new one."
+                : state?.status === "installed"
+                  ? "Setup command ran."
+                  : "Waiting for the setup command to run."}
+            </Progress>
+            <Progress done={false} active={state?.status === "installed"}>
+              {state?.first?.failed
+                ? "Pool got your message, but the request failed. Run the test again."
+                : "Waiting for your test message."}
+            </Progress>
+            <details
+              className={css({
+                "& summary": { color: "dim", fontSize: "14px" },
+              })}
+            >
+              <summary>No reply, or an error?</summary>
+              <ul
+                className={cx(
+                  caption,
+                  css({
+                    display: "grid",
+                    gap: "8px",
+                    mt: "12px",
+                    pl: "18px",
+                    listStyle: "disc",
+                  }),
+                )}
+              >
+                <li>
+                  <code>command not found</code>: install {harness.label} with
+                  the installer in step {first}, then run the test again.
+                </li>
+                <li>
+                  {harness.label} was already open: quit it and start it again.
+                  It reads its settings when it starts.
+                </li>
+                {tool === "claude" && (
+                  <li>
+                    It asks you to log in, or says the API key is invalid:
+                    delete any <code>export ANTHROPIC_API_KEY</code> line from
+                    your shell profile, open a new terminal, and run the test
+                    again.
+                  </li>
+                )}
+                <li>
+                  This page still says the setup command hasn't run: it only
+                  works once, within 10 minutes. Reload the page and get a new
+                  one.
+                </li>
+              </ul>
+            </details>
+          </>
+        )}
       </Step>
     </>
+  );
+}
+
+/** The unmistakable "you're done" state once a test message comes back. */
+function Works({ harness, event }: { harness: Harness; event: UsageEvent }) {
+  return (
+    <div
+      role="status"
+      className={css({
+        display: "grid",
+        gridTemplateColumns: "36px minmax(0, 1fr)",
+        alignItems: "start",
+        gap: "14px",
+        padding: "18px",
+        borderRadius: "control",
+        border:
+          "1px solid color-mix(in srgb, token(colors.ok) 45%, transparent)",
+        background: "color-mix(in srgb, token(colors.ok) 10%, transparent)",
+      })}
+    >
+      <span
+        className={css({
+          display: "grid",
+          placeItems: "center",
+          width: "36px",
+          height: "36px",
+          borderRadius: "full",
+          background: "ok",
+          color: "canvas",
+        })}
+      >
+        <Check size={20} strokeWidth={3} />
+      </span>
+      <div className={css({ display: "grid", gap: "4px" })}>
+        <strong className={css({ fontSize: "18px", fontWeight: 600 })}>
+          It works. You're set up.
+        </strong>
+        <p className={caption}>
+          Pool answered your test message with{" "}
+          {modelLabels[event.model] ?? event.model} in{" "}
+          {number.format(event.latency_ms / 1000)}s. From now on, run{" "}
+          <code>{harness.run}</code> in any project folder and use it as usual.
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -416,7 +508,8 @@ function agentPrompt(harness: Harness, files: ConfigFile[]) {
    Replace "pool_PASTE_YOUR_TOKEN" with my token. Replace "{TOKEN_FILE}" with the absolute path of ${tokenPath}.
 4. Check that each file still parses, and set its permissions to 600.
 5. Tell me which files you changed and where the backups are. Show the token only as its first 9 characters.
-6. Tell me to restart ${harness.label} and send a message. Setup is done when that message gets an answer.
+6. Tell me to quit ${harness.label} if it is open, then run: ${harness.test}
+   Setup is done when that prints a reply.
 
 ${files.map((file) => `${file.path}\n${renderFile(file)}`).join("\n\n")}`;
 }

@@ -13,7 +13,6 @@ import {
   Gauge,
   Globe,
   KeyRound,
-  Layers3,
   LogOut,
   RefreshCw,
   SlidersHorizontal,
@@ -24,6 +23,7 @@ import {
 import { css, cx } from "../styled-system/css";
 import { iconButton } from "../styled-system/recipes";
 import { queries, useTokens, type Me } from "./api";
+import { Logo } from "./brand";
 import { ErrorState, Loading, Person } from "./ui";
 
 const welcomeKey = "pool.welcomed";
@@ -147,7 +147,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
           flexShrink: 0,
         })}
       >
-        <Layers3 size={20} strokeWidth={2} />
+        <Logo />
       </span>
       {!collapsed && "Pool"}
     </a>
