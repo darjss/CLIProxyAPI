@@ -27,6 +27,7 @@ import { Logo } from "./brand";
 import { ErrorState, Loading, Person } from "./ui";
 
 const welcomeKey = "pool.welcomed";
+const t3Key = "pool.t3-usage";
 
 const QuotaPage = lazy(() => import("./pages/QuotaPage"));
 const SetupPage = lazy(() => import("./pages/SetupPage"));
@@ -34,6 +35,7 @@ const TokensPage = lazy(() => import("./pages/TokensPage"));
 const UsagePage = lazy(() => import("./pages/UsagePage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
+const T3Usage = lazy(() => import("./T3Usage"));
 
 type Page = "quota" | "setup" | "tokens" | "usage" | "leaderboard" | "admin";
 type NavItem = { id: Page; label: string; icon: LucideIcon; admin?: boolean };
@@ -197,6 +199,35 @@ function Shell({ me }: { me: Me }) {
     }
     setWelcomed(true);
     window.location.hash = "#/usage";
+  };
+
+  // People who already ran a setup script get asked once, on Accounts, whether they
+  // use T3 Code. The dialog stays open after T3 checks in, so they see it worked.
+  const [t3Asked, setT3Asked] = useState(() => {
+    try {
+      return localStorage.getItem(t3Key) === "no";
+    } catch {
+      return false;
+    }
+  });
+  const [t3Shown, setT3Shown] = useState(false);
+  const connected = tokens.data?.some(
+    (t) => !t.revoked_at && /^(Claude Code|Codex) · /.test(t.name),
+  );
+  const askT3 = !t3Asked && page === "quota" && me.t3 === false && !!connected;
+  useEffect(() => {
+    if (askT3) setT3Shown(true);
+  }, [askT3]);
+  const t3Open = !t3Asked && (t3Shown || askT3);
+  const closeT3 = (never?: boolean) => {
+    if (never) {
+      try {
+        localStorage.setItem(t3Key, "no");
+      } catch {
+        // Private windows can block storage; it asks again next visit.
+      }
+    }
+    setT3Asked(true);
   };
 
   return (
@@ -427,6 +458,11 @@ function Shell({ me }: { me: Me }) {
                 <ErrorState error={new Error("Administrators only.")} />
               ))}
           </Suspense>
+          {t3Open && (
+            <Suspense fallback={null}>
+              <T3Usage onClose={closeT3} />
+            </Suspense>
+          )}
         </main>
       </div>
     </div>

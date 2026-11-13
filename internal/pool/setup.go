@@ -28,6 +28,19 @@ type configFile struct {
 	RemoveEnv []string          `json:"remove_env,omitempty"`
 	TOMLBlock string            `json:"toml_block,omitempty"`
 	TOMLTop   map[string]string `json:"toml_top,omitempty"`
+	// T3 marks T3 Code's settings file: "optional" skips it when T3 Code is missing or
+	// too old, "required" stops the script. The script finds the file and checks the version.
+	T3 string `json:"t3,omitempty"`
+}
+
+// t3Source adds Pool as a CLIProxyAPI usage source in T3 Code. T3 Code moves the
+// key into its own secret store the next time it reads the file.
+func t3Source(base, token, mode string) configFile {
+	return configFile{Path: "~/.t3/userdata/settings.json", T3: mode, JSON: map[string]any{
+		"usageLimitSources": map[string]any{"pool": map[string]any{
+			"kind": "cliproxy", "label": "Pool", "url": base + "/v1/t3", "managementKey": token, "enabled": true,
+		}},
+	}}
 }
 
 type harness struct {
@@ -59,6 +72,8 @@ var harnesses = map[string]harness{
 				TOMLBlock: "[model_providers.pool]\nname = \"Pool\"\nbase_url = \"" + base + "/v1\"\nwire_api = \"responses\"\n" +
 					"auth = { command = \"cat\", args = [\"{TOKEN_FILE}\"] }\n"}}
 		}},
+	// T3 Code only shows usage; every setup script also adds it when T3 Code is installed.
+	"t3": {Label: "T3 Code", files: func(string, string, string) []configFile { return nil }},
 }
 
 type setupCode struct {
@@ -81,6 +96,9 @@ func (s *Setups) register(r *gin.Engine, g *gin.RouterGroup) {
 	g.GET("/setup/harnesses", func(c *gin.Context) {
 		out := map[string]any{}
 		for id, h := range harnesses {
+			if len(h.Models) == 0 {
+				continue
+			}
 			files := map[string][]configFile{}
 			for _, m := range h.Models {
 				files[m] = h.files(baseURL(c), m, tokenPlaceholder)
@@ -98,7 +116,7 @@ func (s *Setups) register(r *gin.Engine, g *gin.RouterGroup) {
 			return
 		}
 		h, ok := harnesses[body.Harness]
-		if !ok || !slices.Contains(h.Models, body.Model) {
+		if !ok || !(slices.Contains(h.Models, body.Model) || len(h.Models) == 0 && body.Model == "") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown tool or model"})
 			return
 		}
@@ -148,6 +166,11 @@ func (s *Setups) register(r *gin.Engine, g *gin.RouterGroup) {
 				return
 			}
 			status["first"] = first
+			// t3 turns true once T3 Code has read Pool usage with any of the member's tokens.
+			if status["t3"], err = s.Store.UsesT3(c.Request.Context(), v.owner.ID); err != nil {
+				respond(c, nil, err)
+				return
+			}
 		}
 		c.JSON(http.StatusOK, status)
 	})
@@ -177,7 +200,11 @@ func (s *Setups) register(r *gin.Engine, g *gin.RouterGroup) {
 			return
 		}
 		spec := ojson.NewDoc([]byte(`{}`))
-		if err = spec.Set("files", h.files(v.base, v.model, secret)); err != nil {
+		mode := "optional"
+		if h.Run == "" {
+			mode = "required"
+		}
+		if err = spec.Set("files", append(h.files(v.base, v.model, secret), t3Source(v.base, secret, mode))); err != nil {
 			respond(c, nil, err)
 			return
 		}
@@ -196,6 +223,17 @@ func baseURL(c *gin.Context) string {
 }
 
 func setupScript(h harness, secret, spec string) string {
+	// The T3 Code script only adds the usage source; it leaves the shared token file alone.
+	if h.Run == "" {
+		return fmt.Sprintf(`#!/bin/sh
+# Pool usage for %[1]s. Generated once for you; this link no longer works.
+set -eu
+command -v python3 >/dev/null 2>&1 || { echo "Pool setup needs python3. Install it, then get a new command from the Pool home page." >&2; exit 1; }
+umask 077
+POOL_SPEC='%[2]s' python3 - <<'POOL_PY'
+%[3]sPOOL_PY
+`, h.Label, spec, mergeProgram)
+	}
 	return fmt.Sprintf(`#!/bin/sh
 # Pool setup for %[1]s. Generated once for you; this link no longer works.
 set -eu
@@ -217,10 +255,49 @@ echo "After that, start %[1]s as usual with: %[5]s"
 }
 
 // mergeProgram applies configFile specs. It backs up each file before writing it with mode 600.
-const mergeProgram = `import base64, datetime, json, os, re, shutil
+const mergeProgram = `import base64, datetime, glob, json, os, plistlib, re, shutil
 spec = json.loads(base64.b64decode(os.environ["POOL_SPEC"]))
 token_file = os.path.expanduser("~/.config/pool/token")
 stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+# T3 Code keeps a hub URL's path from 0.1.3; its nightlies and previews sort below their release.
+def t3_key(version):
+    m = re.match(r"v?(\d+)\.(\d+)\.(\d+)(-?)", version)
+    return (int(m[1]), int(m[2]), int(m[3]), 0 if m[4] else 1) if m else (0, 0, 0, 0)
+
+def t3_version(home):
+    # A running T3 Code records its version; otherwise take the newest installed copy.
+    try:
+        with open(os.path.join(home, "userdata", "server-runtime.json")) as handle:
+            return str(json.load(handle)["serverVersion"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    found = []
+    for app in glob.glob("/Applications/T3 Code*.app") + glob.glob(os.path.expanduser("~/Applications/T3 Code*.app")):
+        try:
+            with open(os.path.join(app, "Contents", "Info.plist"), "rb") as handle:
+                found.append(str(plistlib.load(handle)["CFBundleShortVersionString"]))
+        except (OSError, ValueError, KeyError):
+            pass
+    versions = os.path.join(home, "runtime", "versions")
+    if os.path.isdir(versions):
+        found += os.listdir(versions)
+    return max(found, key=t3_key, default=None)
+
+def t3_settings(required):
+    home = os.environ.get("T3CODE_HOME") or os.path.expanduser("~/.t3")
+    userdata = os.path.join(home, "userdata")
+    problem = None
+    version = t3_version(home)
+    if not os.path.isdir(userdata):
+        problem = "T3 Code is not set up on this computer. Install it and open it once, then get a new command from the Pool home page."
+    elif version and t3_key(version) < (0, 1, 3, 1):
+        problem = "T3 Code " + version + " is too old to show Pool usage. Update T3 Code to 0.1.3 or newer, then use \"See usage in T3 Code\" on the Pool home page."
+    if problem and required:
+        raise SystemExit(problem)
+    if problem and version:
+        print(problem)
+    return None if problem else os.path.join(userdata, "settings.json")
 
 def fill(v):
     if isinstance(v, str):
@@ -240,6 +317,10 @@ def merge(a, b):
 
 for f in spec["files"]:
     path = os.path.expanduser(f["path"])
+    if "t3" in f:
+        path = t3_settings(f["t3"] == "required")
+        if path is None:
+            continue
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     text = ""
     if os.path.exists(path):
@@ -270,4 +351,6 @@ for f in spec["files"]:
         handle.write(text)
     os.replace(temporary, path)
     print("Wrote", path)
+    if "t3" in f:
+        print("T3 Code now shows Pool's accounts on its Usage page.")
 `

@@ -280,7 +280,9 @@ function Install({
             <CodeBlock label="Setup command" value={create.data.command} />
             <p className={caption}>
               Works once, within 10 minutes. It keeps a backup of any settings
-              it changes. Needs Python 3, which Macs and Linux usually have.
+              it changes. Needs Python 3, which Macs and Linux usually have. If
+              you use T3 Code 0.1.3 or newer, it also adds Pool's accounts to T3
+              Code's Usage page.
             </p>
           </>
         ) : (
@@ -430,7 +432,7 @@ function Works({ harness, event }: { harness: Harness; event: UsageEvent }) {
   );
 }
 
-function Progress({
+export function Progress({
   done,
   active,
   children,

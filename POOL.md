@@ -226,6 +226,32 @@ Bindings live in memory, so on reload the old process writes them to
 `sessions.json` next to the database and the new process loads and deletes it.
 Idle bindings expire after `session-affinity-ttl` (1 hour).
 
+## T3 Code usage
+
+T3 Code shows limits from CLIProxyAPI hubs on its Usage page. It calls
+`v0/management/auth-files` and `v0/management/api-call` under the source URL,
+so Pool answers both at `https://pool.erxes.tech/v1/t3` with any member token:
+
+- `auth-files` lists enabled Claude and Codex accounts by quota ID and email.
+- `api-call` only accepts the Claude and Codex usage URLs and returns the
+  collector's last good provider response. It never uses an account token, so
+  T3 sees no secrets and providers see no extra polls. Codex reset credits come
+  back empty; admins spend them on Accounts.
+
+Every setup script also adds `usageLimitSources.pool` to
+`$T3CODE_HOME/userdata/settings.json` (default `~/.t3`) with the new token. T3
+Code picks the file change up live and moves the key into its secret store.
+T3 Code keeps a source URL's path from 0.1.3, so the script reads the version
+from `server-runtime.json`, `/Applications/T3 Code*.app`, or
+`runtime/versions`, and skips the change on anything older, nightlies of 0.1.3
+included. The Claude and Codex scripts print a note and go on; the T3-only
+script stops.
+
+The first T3 read sets `owners.t3_at`, and `/pool/api/me` returns `t3`. Until
+then, Accounts asks people who already ran a Claude Code or Codex setup whether
+they use T3 Code and offers the T3-only command (`harness: "t3"`). "No, I don't
+use it" stays dismissed in that browser.
+
 ## Persistent deployment
 
 Example user services are under `deploy/pool/`. They expect the Pool binary at
