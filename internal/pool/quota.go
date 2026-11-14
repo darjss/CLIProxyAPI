@@ -142,11 +142,12 @@ func (q *Collector) schedule(ctx context.Context) {
 		if _, loaded := q.pending.LoadOrStore(a.ID, true); loaded {
 			continue
 		}
+		// Wait for a free worker so every account is read each round.
 		select {
 		case q.workers <- struct{}{}:
-		default:
+		case <-ctx.Done():
 			q.pending.Delete(a.ID)
-			continue
+			return
 		}
 		q.wg.Add(1)
 		go func(a *coreauth.Auth) {
