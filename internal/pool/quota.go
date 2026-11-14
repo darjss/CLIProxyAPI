@@ -154,7 +154,10 @@ func (q *Collector) schedule(ctx context.Context) {
 			defer q.wg.Done()
 			defer q.pending.Delete(a.ID)
 			defer func() { <-q.workers }()
-			samples, status := q.fetch(ctx, a)
+			// A hung usage request would hold this account's slot forever and leave it unread.
+			fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			samples, status := q.fetch(fetchCtx, a)
 			if ctx.Err() != nil {
 				return
 			}
