@@ -133,9 +133,9 @@ subscription charges or tool/media fees.
 
 Each request is tagged with its coding tool from the User-Agent: `claude-cli/`
 is Claude Code, `codex…` is Codex, and anything else is Other. Usage and the
-leaderboard split cost and tokens by tool. Anyone signed in can open a person's
-daily history from the leaderboard. Individual requests stay private to their
-owner.
+leaderboard split cost and tokens by tool. The leaderboard is admin only, and
+admins can open a person's daily history from it. Everyone else sees only their
+own usage. Individual requests stay private to their owner.
 
 The React dashboard uses Panda CSS tokens, shared component recipes, and
 generated static utilities. `npm ci` runs Panda code generation; the generated

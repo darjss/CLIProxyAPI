@@ -201,7 +201,7 @@ export const queries = {
   leaders: (period: Period, metric: Metric) => ({
     queryKey: ["leaders", period, metric],
     queryFn: ({ signal }: { signal: AbortSignal }) =>
-      api<Leader[]>(`/leaderboard?period=${period}&metric=${metric}`, {
+      api<Leader[]>(`/admin/leaderboard?period=${period}&metric=${metric}`, {
         signal,
       }),
   }),
