@@ -296,13 +296,17 @@ func (p *Portal) Register(r *gin.Engine) {
 		err := p.Store.Rename(c.Request.Context(), member(c), c.Param("id"), body.Name)
 		respond(c, gin.H{"saved": err == nil}, err)
 	})
-	// Aggregates are shared with the team, like the leaderboard; individual requests stay private.
+	// Admins can open anyone's daily usage from the leaderboard; individual requests stay private.
 	g.GET("/usage", func(c *gin.Context) {
 		since, ok := p.since(c)
 		if !ok {
 			return
 		}
 		owner := c.DefaultQuery("owner", member(c).ID)
+		if owner != member(c).ID && !member(c).Admin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+			return
+		}
 		v, err := p.Store.Usage(c.Request.Context(), owner, since)
 		respond(c, v, err)
 	})
@@ -314,7 +318,14 @@ func (p *Portal) Register(r *gin.Engine) {
 		v, err := p.Store.Events(c.Request.Context(), member(c).ID, since)
 		respond(c, v, err)
 	})
-	g.GET("/leaderboard", func(c *gin.Context) {
+	admin := g.Group("/admin", func(c *gin.Context) {
+		if !member(c).Admin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+			return
+		}
+		c.Next()
+	})
+	admin.GET("/leaderboard", func(c *gin.Context) {
 		since, ok := p.since(c)
 		if !ok {
 			return
@@ -326,13 +337,6 @@ func (p *Portal) Register(r *gin.Engine) {
 		}
 		v, err := p.Store.Leaders(c.Request.Context(), since, metric)
 		respond(c, v, err)
-	})
-	admin := g.Group("/admin", func(c *gin.Context) {
-		if !member(c).Admin {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin access required"})
-			return
-		}
-		c.Next()
 	})
 	// disable, enable, or reset (clear Pool's cooldown after an upstream 429).
 	admin.POST("/accounts/:id/:action", func(c *gin.Context) {

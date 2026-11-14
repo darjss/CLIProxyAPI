@@ -47,7 +47,7 @@ const navigation: NavItem[][] = [
   ],
   [
     { id: "usage", label: "Usage", icon: Activity },
-    { id: "leaderboard", label: "Leaderboard", icon: Trophy },
+    { id: "leaderboard", label: "Leaderboard", icon: Trophy, admin: true },
     { id: "tokens", label: "API Tokens", icon: KeyRound },
   ],
   [
@@ -450,13 +450,11 @@ function Shell({ me }: { me: Me }) {
             )}
             {page === "tokens" && <TokensPage />}
             {page === "usage" && <UsagePage />}
-            {page === "leaderboard" && <LeaderboardPage />}
-            {page === "admin" &&
-              (admin ? (
-                <AdminPage />
-              ) : (
-                <ErrorState error={new Error("Administrators only.")} />
-              ))}
+            {(page === "leaderboard" || page === "admin") && !admin && (
+              <ErrorState error={new Error("Administrators only.")} />
+            )}
+            {page === "leaderboard" && admin && <LeaderboardPage />}
+            {page === "admin" && admin && <AdminPage />}
           </Suspense>
           {t3Open && (
             <Suspense fallback={null}>
